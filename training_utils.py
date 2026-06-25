@@ -34,7 +34,7 @@ def _lr_at(step, total, base_lr, schedule):
     return base_lr * 0.5 * (1.0 + math.cos(math.pi * progress))       # cosine decay to ~0
 
 
-def divisor_heads(d_model, options=(1, 2, 4, 8)):
+def divisor_heads(d_model, options=(1, 2, 4, 8, 16)):
     """Head counts that evenly divide d_model (so d_k is an integer)."""
     return [h for h in options if d_model % h == 0]
 
