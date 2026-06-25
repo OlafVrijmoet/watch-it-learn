@@ -122,6 +122,13 @@ class AddTask(SeqTask):
         out = torch.stack([(s // (10 ** p)) % 10 for p in range(self.out_len)], dim=1)
         return _assemble(inp, out, self.sep_id, device)
 
+    def category_of(self, x_row, y_row=None):     # per-category breakdown: does this addition carry?
+        n = self.n_digits
+        a = int("".join(str(int(d)) for d in x_row[:n]))
+        b = int("".join(str(int(d)) for d in x_row[n + 1:2 * n + 1]))
+        ds = lambda v: sum(int(c) for c in str(v))     # digit-sum drops by 9 for each carry
+        return "carry" if ds(a) + ds(b) != ds(a + b) else "no carry"
+
 
 # ---------------------------------------------------------------------------
 # Arithmetic: like Add, but the example shows one of several operations (+ − ×) and the
@@ -139,6 +146,7 @@ class ArithmeticTask(SeqTask):
     }
     PLUS, MINUS, TIMES, EQ = 10, 11, 12, 13       # operator tokens + '=' separator
     _OP = {"add": PLUS, "subtract": MINUS, "multiply": TIMES}
+    _CAT = {PLUS: "add", MINUS: "subtract", TIMES: "multiply"}
 
     def __init__(self, n_digits=2, ops=("add",)):
         self.n_digits = n_digits
@@ -176,6 +184,9 @@ class ArithmeticTask(SeqTask):
                          self._digits_msb(b_show, self.n_digits)], dim=1)
         out = torch.stack([(res // (10 ** p)) % 10 for p in range(self.out_len)], dim=1)   # LSB first
         return _assemble(inp, out, self.sep_id, device)
+
+    def category_of(self, x_row, y_row=None):     # per-category breakdown: which operation is this example?
+        return self._CAT.get(int(x_row[self.n_digits]))   # the operator token sits at prompt index n_digits
 
 
 # ---------------------------------------------------------------------------

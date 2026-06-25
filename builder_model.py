@@ -332,6 +332,9 @@ class MajorityTask:
         label = (x.sum(dim=1) * 2 > self.length).long()         # majority of 1s
         return x.to(device), label.to(device)
 
+    def category_of(self, x_row, y_row):          # per-category breakdown: split by the true class
+        return "majority of 1s" if int(y_row) == 1 else "majority of 0s"
+
 
 class DensityTask:
     """Regression: predict the fraction of '1's in the sequence (a number in [0, 1])."""

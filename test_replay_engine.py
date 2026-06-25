@@ -21,8 +21,29 @@ import torch
 
 from replay_engine import (
     RunConfig, TrainingRun, log_spaced_steps, trace_forward, sample_token,
-    generate_sampled, build_task,
+    generate_sampled, build_task, per_category_eval,
 )
+
+
+def test_per_category_eval_lm():
+    """per_category_eval returns one entry per Arithmetic operation, with valid accuracy + counts."""
+    cfg = RunConfig(task_name="Arithmetic", task_kwargs={"n_digits": 1, "ops": ["add", "subtract"]},
+                    layer_specs=(("attn",), ("dense", (64,))), d_model=32, n_heads=4,
+                    steps=60, n_checkpoints=6, seed=0)
+    run = TrainingRun.train(cfg)
+    cats = per_category_eval(run.reconstruct(run.cfg.steps), run.task, batch=256)
+    assert set(cats) == {"add", "subtract"}                         # one bucket per selected op
+    assert all(0.0 <= a <= 1.0 and n > 0 for a, n in cats.values())  # valid accuracy + non-empty counts
+
+
+def test_per_category_eval_classify():
+    """per_category_eval splits a classification task (Majority) by its true class."""
+    cfg = RunConfig(task_name="Majority", task_kwargs={}, layer_specs=(("attn",), ("dense", (64,))),
+                    d_model=32, n_heads=4, head="classify", pooling="mean", steps=60, n_checkpoints=6, seed=0)
+    run = TrainingRun.train(cfg)
+    cats = per_category_eval(run.reconstruct(run.cfg.steps), run.task, batch=256)
+    assert cats and set(cats) <= {"majority of 0s", "majority of 1s"}
+    assert all(0.0 <= a <= 1.0 and n > 0 for a, n in cats.values())
 
 
 # small configs to keep tests fast

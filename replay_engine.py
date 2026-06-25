@@ -563,6 +563,29 @@ def _eval_pooled(model, task, device, split="test", batch=512):
     return float(loss.item()), _batch_score(out, target, task_kind(task))
 
 
+@torch.no_grad()
+def per_category_eval(model, task, device="cpu", batch=512, split="test"):
+    """For a task that defines `category_of(x_row, y_row)`, return {category: (accuracy, count)} on the
+    given split (default = held-out). Accuracy is exact-match of the generated output (LM) or argmax ==
+    label (classify); the counts double as the category distribution. Tasks without `category_of` skip this."""
+    model.eval()
+    x, y, *rest = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
+    if task_kind(task) == "lm":
+        preds = generate(model, task, rest[0], device)
+        correct = (preds == rest[0][:, task.prompt_len:]).all(dim=1)
+    else:
+        logits, _ = model(x, y)
+        correct = (logits.argmax(dim=-1) == y)
+    agg = {}
+    for i in range(x.shape[0]):
+        cat = task.category_of(x[i], y[i])
+        if cat is None:
+            continue
+        a = agg.setdefault(cat, [0, 0])
+        a[0] += int(correct[i].item()); a[1] += 1
+    return {c: (n / t, t) for c, (n, t) in sorted(agg.items()) if t}
+
+
 def train_eval_curve(run):
     """Per-checkpoint TRAIN-split (losses, accs), computed on the fly: reconstruct each checkpoint
     and evaluate on the train split with the SAME method as the stored held-out eval. The held-out

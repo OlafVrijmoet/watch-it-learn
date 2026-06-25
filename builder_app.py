@@ -22,7 +22,7 @@ import torch
 from replay_engine import (RunConfig, TrainingRun, build_model, build_task, trace_forward,
                            generate_sampled, ALL_TASKS, is_heldout,
                            layer_gradients, sample_train_batch, exact_train_batch, train_eval_curve,
-                           continue_training, gradient_scale)
+                           continue_training, gradient_scale, per_category_eval)
 from flow_svg import flow_svg_component, model_svg, svg_document, replay_html
 from flow_component import flow_html, component_height
 from training_utils import divisor_heads, suggest_lr_transformer
@@ -477,6 +477,18 @@ with run_tab:                                                 # always-visible w
                                 f"acc · held {ckp.acc:.2f}" + (f" · train {tr_a[ci]:.2f}" if tr_a else ""),
                                 ys2=tr_a, color2="#f59e0b"))
         model = run.reconstruct(step)                         # the model AT the chosen stage
+
+        if hasattr(task, "category_of"):                      # per-category held-out accuracy + distribution
+            _ckey = f"{sig}|cat|s{step}|t{steps_all[-1]}"
+            if st.session_state.get("catbreak_key") != _ckey:
+                with st.spinner("scoring per category…"):
+                    st.session_state.catbreak = per_category_eval(model, task)
+                st.session_state.catbreak_key = _ckey
+            _cb = st.session_state.catbreak
+            if _cb:
+                st.caption("**held-out accuracy by category** — at this training stage")
+                st.dataframe(pd.DataFrame([{"category": c, "accuracy": f"{a:.0%}", "count": n}
+                                           for c, (a, n) in _cb.items()]), hide_index=True, width="stretch")
         in_ids_now = torch.tensor([chosen])
         show_grads = st.toggle("🔥 show gradients (bars + ∇ overlay in the canvas)", key="showgrad")
         if show_grads:
