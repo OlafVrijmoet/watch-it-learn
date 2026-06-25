@@ -283,13 +283,18 @@ with st.sidebar:
         else:
             extra, continue_clicked = 0, False
 
-    # ---- Train-all / Retrain-all (sidebar bottom, always visible below the tabs) ----
+    # ---- Train-all / Retrain-all / Continue-all (sidebar bottom, always visible below the tabs) ----
     st.divider()
     _untrained_n = sum(1 for v in exp["versions"] if v["run"] is None)
+    _trained_n = sum(1 for v in exp["versions"] if v["run"] is not None)
     trainall_clicked = st.button(f"▶ Train all untrained  ({_untrained_n})", key="trainall",
                                  type="primary", width="stretch", disabled=_untrained_n == 0)
     retrainall_clicked = st.button(f"↻ Retrain all  ({len(exp['versions'])})", key="retrainall",
                                    width="stretch", help="force-retrain every version (e.g. after a task change)")
+    continueall_extra = int(st.number_input("continue: +steps for all", 50, 2000, 200, 50, key="continueall_extra"))
+    continueall_clicked = st.button(f"➕ Continue all  (+{continueall_extra} × {_trained_n})", key="continueall",
+                                    width="stretch", disabled=_trained_n == 0,
+                                    help="warm-start every trained version and append more steps")
     exec_mode = st.radio("execution", ["Sequential", "Parallel (background)"],
                          horizontal=True, key="execmode")
     if exec_mode.startswith("Parallel"):
@@ -540,14 +545,32 @@ if train_clicked:
 
 # ---- train a batch of versions sequentially, with LIVE loss + accuracy for every run ----
 #   "Train all untrained" -> only versions with no run · "Retrain all" -> every version (force)
-_batch = ([v for v in exp["versions"] if v["run"] is None] if trainall_clicked
-          else list(exp["versions"]) if retrainall_clicked else None)
-if _batch is not None:
+# --- batch train / retrain / continue, with LIVE loss + accuracy for every version ---
+#   Train all untrained -> versions with no run · Retrain all -> every version (force)
+#   Continue all -> every trained version, warm-started + `continueall_extra` more steps appended
+if trainall_clicked:
+    _batch, _mode = [v for v in exp["versions"] if v["run"] is None], "train"
+elif retrainall_clicked:
+    _batch, _mode = list(exp["versions"]), "train"
+elif continueall_clicked:
+    _batch, _mode = [v for v in exp["versions"] if v["run"] is not None], "continue"
+else:
+    _batch, _mode = None, None
+
+if _batch:
     todo = _batch
     view = st.session_state.get("trainall_view", "Overlay")
     names = {v["id"]: v["name"] for v in todo}
-    curves = {v["id"]: {"step": [], "loss": [], "acc": []} for v in todo}
-    st.subheader(f"⏳ Training {len(todo)} version(s) — live ({view.lower()})")
+
+    def _curve(cks):                                            # held-out curve from a list of checkpoints
+        return {"step": [c.step for c in cks], "loss": [round(c.eval_loss, 4) for c in cks],
+                "acc": [round(c.acc, 4) for c in cks]}
+
+    # continue seeds each curve with the run's existing history; train/retrain start empty
+    curves = {v["id"]: (_curve(v["run"].checkpoints) if _mode == "continue"
+                        else {"step": [], "loss": [], "acc": []}) for v in todo}
+    st.subheader(f"⏳ {'Continuing' if _mode == 'continue' else 'Training'} {len(todo)} version(s) "
+                 f"— live ({view.lower()})")
     bar = st.progress(0.0, text="starting…")
     loss_ph = acc_ph = None
     phs = {}
@@ -576,23 +599,36 @@ if _batch is not None:
             ap.line_chart(pd.DataFrame({"step": curves[cur_id]["step"], "accuracy": curves[cur_id]["acc"]}),
                           x="step", y="accuracy")
 
+    if _mode == "continue":                                     # show each run's existing curve before appending
+        if view == "Overlay":
+            redraw(next(iter(curves)))
+        else:
+            for cur_id in curves:
+                redraw(cur_id)
+
     for k, v in enumerate(todo):
         vid = v["id"]
-        vcfg = cfg if vid == exp["active"] else version_cfg(v)   # active uses the live cfg
-        vsig = sig if vid == exp["active"] else version_sig(v)
+        if _mode == "continue":
+            total, base = continueall_extra, v["run"].checkpoint_steps[-1]
+        else:
+            vcfg = cfg if vid == exp["active"] else version_cfg(v)   # active uses the live cfg
+            vsig = sig if vid == exp["active"] else version_sig(v)
+            total, base = vcfg.steps, 0
 
-        def on_step(s, metrics, _k=k, _name=names[vid], _total=vcfg.steps):
-            bar.progress(min(1.0, (_k + (s + 1) / _total) / len(todo)),
-                         text=f"{_name} ({_k + 1}/{len(todo)}) · step {s + 1}/{_total}")
+        def on_step(s, metrics, _k=k, _name=names[vid], _total=total, _base=base):
+            d = s - _base                                       # continue passes absolute steps; show relative
+            bar.progress(min(1.0, (_k + (d + 1) / _total) / len(todo)),
+                         text=f"{_name} ({_k + 1}/{len(todo)}) · step {d + 1}/{_total}")
 
-        def on_ck(ck, all_, _vid=vid):                          # checkpoints (log-spaced) feed the curves
-            curves[_vid]["step"].append(ck.step)
-            curves[_vid]["loss"].append(round(ck.eval_loss, 4))
-            curves[_vid]["acc"].append(round(ck.acc, 4))
+        def on_ck(ck, all_, _vid=vid):                          # rebuild from all_ (covers seeded + new)
+            curves[_vid] = _curve(all_)
             redraw(_vid)
 
-        v["run"] = TrainingRun.train(vcfg, on_step=on_step, on_checkpoint=on_ck)
-        v["run_sig"] = vsig
+        if _mode == "continue":
+            continue_training(v["run"], continueall_extra, on_step=on_step, on_checkpoint=on_ck)
+        else:
+            v["run"] = TrainingRun.train(vcfg, on_step=on_step, on_checkpoint=on_ck)
+            v["run_sig"] = vsig
     bar.empty()
     st.rerun()
 

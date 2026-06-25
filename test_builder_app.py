@@ -160,6 +160,23 @@ def test_train_all_uses_shared_steps():
     assert all(v["run"].cfg.steps == 150 for v in vs)              # Retrain-all applies it to every version
 
 
+def test_continue_all_appends_to_every_run():
+    """'Continue all' warm-starts every trained version and appends more checkpoints (additive)."""
+    at = _fresh_app()
+    _by_key(at.slider, "steps").set_value(50); _by_key(at.slider, "nck").set_value(10); at.run()
+    _by_key(at.button, "dupv").click(); at.run()                      # 2 versions
+    _by_key(at.button, "trainall").click(); at.run()                  # both trained
+    vs = at.session_state["experiment"]["versions"]
+    before = {v["id"]: (len(v["run"].checkpoints), v["run"].checkpoint_steps[-1]) for v in vs}
+    _by_key(at.number_input, "continueall_extra").set_value(100); at.run()
+    _by_key(at.button, "continueall").click(); at.run()
+    assert not at.exception, at.exception
+    for v in at.session_state["experiment"]["versions"]:
+        n0, last0 = before[v["id"]]
+        assert len(v["run"].checkpoints) > n0                        # more checkpoints
+        assert v["run"].checkpoint_steps[-1] > last0                 # trained further (appended)
+
+
 def test_train_then_scrub():
     at = _fresh_app()
     # tiny, fast run
