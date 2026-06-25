@@ -24,7 +24,6 @@ Everything reuses the model / tasks / optimizers already in the repo.
 """
 from __future__ import annotations
 
-import copy
 import json
 from dataclasses import dataclass, field, asdict, replace
 

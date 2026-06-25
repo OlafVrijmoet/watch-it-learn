@@ -7,7 +7,8 @@ training history — the same view fills in with the real values at each step.
 
 Constraint: a Streamlit st.iframe (srcdoc) is one-way (no npm custom component),
 so the ➕/settings are Streamlit widgets in a section spine beside the render, and the SVG
-render reflects the current architecture. Run:  streamlit run builder_app.py
+render reflects the current architecture. This is one of two pages — run the whole app with
+`streamlit run app.py` (Builder + Compare).
 """
 from __future__ import annotations
 
@@ -25,6 +26,13 @@ from replay_engine import (RunConfig, TrainingRun, build_model, build_task, trac
 from flow_svg import flow_svg_component, model_svg, svg_document, replay_html
 from flow_component import flow_html, component_height
 from training_utils import divisor_heads, suggest_lr_transformer
+
+def _show(target, fig):
+    """Render a matplotlib figure into `target` (st or a column) then close it. st.pyplot does NOT close
+    it, so without this every scrub/toggle leaks a figure into matplotlib's global registry."""
+    target.pyplot(fig)
+    plt.close(fig)
+
 
 def _metric_chart(xs, ys, cur, color, title, ys2=None, color2="#9ca3af"):
     """A small held-out metric curve with a dashed marker at the current training step. If `ys2`
@@ -294,67 +302,22 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # config derivation for the active version
 # ---------------------------------------------------------------------------
-def layer_specs():
-    # read the LIVE widget values from session_state (updated before this rerun) so the render
-    # reflects a setting change immediately, regardless of widget vs render code order.
-    ss = st.session_state
-    specs = []
-    for b in arch:
-        i = b["_id"]
-        ovr = ss.get(f"ov{i}", b.get("override", False))     # does this section override the defaults?
-        if b["type"] == "attn":
-            nh = ss.get(f"nh{i}", b.get("n_heads", n_heads))
-            if d_model % nh != 0:
-                nh = n_heads
-            wo_on = ss.get(f"wo{i}", bool(b.get("wo_hidden")))
-            wo_hidden = (int(ss.get(f"wou{i}", b.get("wo_units", d_model))),) if wo_on else ()
-            specs.append(("attn", {"n_heads": nh,
-                                   "causal": ss.get(f"ca{i}", b.get("causal", True)),
-                                   "bias": ss.get(f"ba{i}", b.get("bias", default_bias)) if ovr else default_bias,
-                                   "attn_dropout": ss.get(f"ad{i}", b.get("attn_dropout", dropout)) if ovr else dropout,
-                                   "wo_hidden": wo_hidden,
-                                   "wo_activation": ss.get(f"woa{i}", b.get("wo_act", "gelu"))}))
-        else:
-            units = int(ss.get(f"hu{i}", b.get("hidden", ffn_mult * d_model)))
-            nl = int(ss.get(f"nl{i}", b.get("n_layers", 1)))
-            specs.append(("dense", {"hidden": tuple([units] * nl),
-                                    "activation": ss.get(f"ac{i}", b.get("activation", default_activation)) if ovr else default_activation,
-                                    "bias": ss.get(f"fb{i}", b.get("bias", default_bias)) if ovr else default_bias,
-                                    "dropout": ss.get(f"fd{i}", b.get("dropout", dropout)) if ovr else dropout}))
-    return tuple(specs)
-
-
-def make_cfg():
-    pool = st.session_state.get("pool_sel", "mean") if head_kind in ("classify", "regression") else "last"
-    return RunConfig(task_name=task_name, task_kwargs=task_kwargs, layer_specs=layer_specs(),
-                     d_model=d_model, n_heads=n_heads, dropout=dropout, steps=steps, batch=batch,
-                     lr=lr, optimizer=optimizer, lr_schedule=lr_schedule, head=head_kind,
-                     pooling=pool, pos_encoding=st.session_state.get("pos_encoding", "learned"),
-                     init=init_scheme, init_scale=init_scale, seed=seed,
-                     n_checkpoints=n_checkpoints, device=dev)
-
-
-cfg = make_cfg()
-task = build_task(cfg)
-sig = cfg.to_json()                                          # detect when a trained run is stale
-
-
-def _dev(device_val):
-    if device_val == "gpu":
-        return ("mps" if torch.backends.mps.is_available()
-                else "cuda" if torch.cuda.is_available() else "cpu")
-    return "cpu"
+def _active_config():
+    """The active version's config as a dict: the live widget values (with DEFAULTS as fallback)."""
+    return {base: st.session_state.get(base, DEFAULTS[base]) for base in CONFIG_KEYS}
 
 
 def version_layer_specs(arch_, c):
-    """layer_specs for ANY version: section settings persist by unique _id; defaults come from `c`."""
+    """layer_specs for ANY version (the single source of truth): per-section settings persist by their
+    unique _id; defaults come from `c`. Reads live widget values, so a setting change shows immediately
+    (regardless of widget vs render order)."""
     ss = st.session_state
     dm, nh_def, ffn = c["d_model"], c["n_heads"], c["ffn_mult"]
     act_def, bias_def, drop = c["def_act"], c["def_bias"], c["def_dropout"]
     specs = []
     for b in arch_:
         i = b["_id"]
-        ovr = ss.get(f"ov{i}", b.get("override", False))
+        ovr = ss.get(f"ov{i}", b.get("override", False))     # does this section override the defaults?
         if b["type"] == "attn":
             nh = ss.get(f"nh{i}", b.get("n_heads", nh_def))
             if dm % nh != 0:
@@ -376,18 +339,30 @@ def version_layer_specs(arch_, c):
     return tuple(specs)
 
 
-def version_cfg(v):
-    """Build a RunConfig for any version: per-version architecture/init/output (its saved `config` + arch)
-    + the SHARED training protocol (steps/batch/lr/optimizer/schedule/checkpoints/device from the Train tab)."""
-    c = {**DEFAULTS, **(v.get("config") or {})}
+def _build_cfg(c, arch_):
+    """A RunConfig from a per-version config dict `c` (architecture / init / output) + its arch, plus the
+    SHARED task and training protocol (steps/batch/lr/optimizer/schedule/checkpoints/device) from the Train tab."""
     pool = c["pool_sel"] if head_kind in ("classify", "regression") else "last"
     return RunConfig(task_name=task_name, task_kwargs=task_kwargs,
-                     layer_specs=version_layer_specs(v["arch"], c),
+                     layer_specs=version_layer_specs(arch_, c),
                      d_model=c["d_model"], n_heads=c["n_heads"], dropout=c["def_dropout"],
-                     steps=steps, batch=batch, lr=lr, optimizer=optimizer,        # shared (Train tab)
+                     steps=steps, batch=batch, lr=lr, optimizer=optimizer,
                      lr_schedule=lr_schedule, head=head_kind, pooling=pool,
                      pos_encoding=c["pos_encoding"], init=c["init_scheme"], init_scale=c["init_scale"],
                      seed=c["seed"], n_checkpoints=n_checkpoints, device=dev)
+
+
+def make_cfg():                                              # the active version's RunConfig (live widgets)
+    return _build_cfg(_active_config(), arch)
+
+
+def version_cfg(v):                                         # any version's RunConfig (its saved config + arch)
+    return _build_cfg({**DEFAULTS, **(v.get("config") or {})}, v["arch"])
+
+
+cfg = make_cfg()
+task = build_task(cfg)
+sig = cfg.to_json()                                          # detect when a trained run is stale
 
 
 def version_sig(v):
@@ -490,10 +465,10 @@ with run_tab:                                                 # always-visible w
             tr_l, tr_a = st.session_state.traincurve
         xs = [c.step for c in run.checkpoints]
         ci = run.checkpoint_steps.index(ckp.step)
-        st.pyplot(_metric_chart(xs, [c.eval_loss for c in run.checkpoints], step, "#dc2626",
+        _show(st, _metric_chart(xs, [c.eval_loss for c in run.checkpoints], step, "#dc2626",
                                 f"loss · held {ckp.eval_loss:.3f}" + (f" · train {tr_l[ci]:.3f}" if tr_l else ""),
                                 ys2=tr_l, color2="#f59e0b"))
-        st.pyplot(_metric_chart(xs, [c.acc for c in run.checkpoints], step, "#16a34a",
+        _show(st, _metric_chart(xs, [c.acc for c in run.checkpoints], step, "#16a34a",
                                 f"acc · held {ckp.acc:.2f}" + (f" · train {tr_a[ci]:.2f}" if tr_a else ""),
                                 ys2=tr_a, color2="#f59e0b"))
         model = run.reconstruct(step)                         # the model AT the chosen stage
@@ -676,18 +651,18 @@ with col_model:
             with st.expander("▶ Play the whole training as an animation"):
                 psig = f"{sig}|rp{readout_pos}|in{chosen}|t{steps_all[-1]}"
                 if st.session_state.get("replay_sig") != psig:
-                    steps = steps_all if len(steps_all) <= 18 else \
+                    replay_steps = steps_all if len(steps_all) <= 18 else \
                         sorted({steps_all[round(k * (len(steps_all) - 1) / 17)] for k in range(18)})
                     frames, W, H = [], 0, 0
                     prog = st.progress(0.0, text="rendering frames…")
-                    for nn, stp in enumerate(steps):
+                    for nn, stp in enumerate(replay_steps):
                         ck = run.nearest_checkpoint(stp)
                         m = run.reconstruct(stp)
                         trc = trace_forward(m, task, make_probe(m))
                         inner, w, h = model_svg(trc, readout_pos)
                         frames.append((stp, ck.eval_loss, ck.acc, svg_document(inner, w, h)))
                         W, H = max(W, w), max(H, h)
-                        prog.progress((nn + 1) / len(steps))
+                        prog.progress((nn + 1) / len(replay_steps))
                     prog.empty()
                     st.session_state.replay_html = replay_html(frames, W, H)
                     st.session_state.replay_sig = psig
@@ -715,8 +690,8 @@ with col_model:
                         st.session_state.gscale_sig = gkey2
                 xmax = st.session_state.gscale
             gg1, gg2 = st.columns(2)
-            gg1.pyplot(_grad_bars(grads, arch, log=log_g, per_head=per_head, xmax=xmax))
-            gg2.pyplot(_metric_chart(run.metrics["step"], run.metrics["grad_norm"], step, "#7c3aed",
+            _show(gg1, _grad_bars(grads, arch, log=log_g, per_head=per_head, xmax=xmax))
+            _show(gg2, _metric_chart(run.metrics["step"], run.metrics["grad_norm"], step, "#7c3aed",
                                      f"total ‖∇‖ over training (now {grads['total']:.3f})"))
             gg2.caption("The total gradient shrinks as it converges; Q/K often start near zero "
                         "(flat attention) and grow as the model learns what to attend to.")
