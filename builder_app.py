@@ -262,7 +262,7 @@ with st.sidebar:
         seed = int(st.number_input("random seed", 0, 9999, 0, key="seed"))
     with tab_train:
         st.caption("⚙ training protocol — **shared by every version** (Train all / Retrain all use these)")
-        steps = st.slider("steps", 50, 1500, 400, 50, key="steps")
+        steps = st.slider("steps", 50, 3000, 400, 50, key="steps")
         batch = st.select_slider("batch size", options=[32, 64, 128, 256], value=128, key="batch")
         optimizer = st.selectbox("optimizer", ["AdamW", "Adam", "SGD (momentum)", "RMSprop"], key="optimizer")
         lr = st.number_input("learning rate",
