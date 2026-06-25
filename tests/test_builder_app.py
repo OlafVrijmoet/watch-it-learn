@@ -5,7 +5,7 @@ Drives the real app headlessly: configure a tiny run, click Train, scrub the
 training timeline, and assert the whole pipeline (train -> reconstruct -> render
 the flow / attention / logit-lens figures) runs without errors.
 
-Run:  python -m pytest test_builder_app.py -v   (or: python test_builder_app.py)
+Run:  PYTHONPATH=. python tests/test_builder_app.py (from the repo root)
 """
 from __future__ import annotations
 

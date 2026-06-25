@@ -10,7 +10,7 @@ Focus areas:
   * sampling methods
   * device handling
 
-Run with:  python -m pytest test_replay_engine.py -v      (or just: python test_replay_engine.py)
+Run with:  PYTHONPATH=. python tests/test_replay_engine.py (from the repo root)
 """
 from __future__ import annotations
 

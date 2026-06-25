@@ -59,11 +59,11 @@ streamlit run app.py
 
 Then: **Build** a model (or keep the default) → **Train** → open the **Run** tab to scrub stages, feed your own input, and toggle the gradient view. To compare architectures, add **versions**, hit **▶ Train all untrained**, and switch to the **Compare** page.
 
-Run the tests:
+Run the tests (from the repo root):
 
 ```bash
 for t in test_replay_engine test_builder_model test_flow_svg test_flow_component test_builder_app; do
-  python $t.py
+  PYTHONPATH=. python tests/$t.py
 done
 ```
 
@@ -81,6 +81,7 @@ done
 | `tasks.py` | the task family (Reverse, Add, Arithmetic, Index, …) |
 | `tiny_gpt.py` | minimal GPT primitives + the Sort task |
 | `training_utils.py` | optimizer factory, LR schedule, hyperparameter heuristics |
+| `tests/` | the test suite (`PYTHONPATH=. python tests/<name>.py`) |
 
 ## A bit of history
 
@@ -92,5 +93,4 @@ This grew out of a "teach a tiny GPT to sort" notebook and a TensorFlow-Playgrou
 
 ---
 
-<!-- TODO(step 3): LICENSE (MIT), requirements.txt, .gitignore -->
-<!-- TODO(step 4): GitHub repo + push, Streamlit Community Cloud deploy, GIF/screenshots in docs/ -->
+<!-- TODO: GitHub repo + push, Streamlit Community Cloud deploy, GIF/screenshots in docs/ -->

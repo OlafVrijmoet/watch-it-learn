@@ -5,7 +5,7 @@ It's plain SVG, so cairosvg can rasterize it to a real PNG for a genuine self-ch
 These verify the whole-model render builds for different head counts, the Streamlit component HTML
 is well-formed with hover hooks, the SVG actually rasterizes, and the gradient overlay draws.
 
-Run:  python -m pytest test_flow_svg.py -v   (or: python test_flow_svg.py)
+Run:  PYTHONPATH=. python tests/test_flow_svg.py (from the repo root)
 """
 from __future__ import annotations
 

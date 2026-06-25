@@ -6,7 +6,7 @@ produces a self-contained document that embeds VALID JSON matching the trace, pu
 D3, and renders for every head type. (The replay engine produces the trace; these tests
 use it end to end.)
 
-Run:  python -m pytest test_flow_component.py -v   (or: python test_flow_component.py)
+Run:  PYTHONPATH=. python tests/test_flow_component.py (from the repo root)
 """
 from __future__ import annotations
 

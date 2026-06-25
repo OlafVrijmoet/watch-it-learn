@@ -2,7 +2,7 @@
 Tests for builder_model.py - the fully configurable model (W_O / activations / bias /
 positional encoding / pooling / output heads) and the classification & regression tasks.
 
-Run:  python -m pytest test_builder_model.py -v   (or: python test_builder_model.py)
+Run:  PYTHONPATH=. python tests/test_builder_model.py (from the repo root)
 """
 from __future__ import annotations
 
