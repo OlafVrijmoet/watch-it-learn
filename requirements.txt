@@ -1,0 +1,6 @@
+# Runtime dependencies (the app: `streamlit run app.py`)
+streamlit==1.58.0
+torch==2.12.1
+matplotlib==3.11.0
+pandas==3.0.3
+numpy==2.4.6

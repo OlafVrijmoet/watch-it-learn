@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Training / experiment artifacts
+runs/
+
+# OS / editor
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Internal planning / review notes (not part of the public project)
+.plans/
+
+# Claude Code harness internals
+.claude/

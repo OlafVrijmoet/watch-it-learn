@@ -1,0 +1,3 @@
+# Dev/test dependencies (the runtime deps + tools the tests need)
+-r requirements.txt
+cairosvg==2.9.0   # used by flow_svg.render_png + test_flow_svg.py to rasterize the SVG to PNG
