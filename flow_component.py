@@ -187,7 +187,8 @@ svg.attr("width", wide).attr("height", y + 10);
 
 def flow_html(trace: dict) -> str:
     """Self-contained HTML rendering of one `trace_forward(...)` result."""
-    return _TEMPLATE.replace("__DATA__", json.dumps(trace))
+    # escape "<" so a vocab token containing "</script>" can't break out of the <script> block
+    return _TEMPLATE.replace("__DATA__", json.dumps(trace).replace("<", "\\u003c"))
 
 
 def component_height(trace: dict) -> int:

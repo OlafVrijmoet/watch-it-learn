@@ -25,10 +25,6 @@ if TYPE_CHECKING:                       # type-hints only; a runtime import woul
     from tasks import Task
 
 
-def count_params(model: nn.Module) -> int:
-    return sum(p.numel() for p in model.parameters())
-
-
 # ---------------------------------------------------------------------------
 # The task: sort short sequences of DISTINCT digits, as next-token prediction.
 #

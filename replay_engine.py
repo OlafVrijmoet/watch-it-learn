@@ -31,11 +31,11 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from tiny_gpt import get_device, generate, evaluate, count_params
+from tiny_gpt import get_device, generate, evaluate
 from tasks import TASKS, Task
 from training_utils import make_optimizer, _lr_at
 from builder_model import (BuilderModel, BuilderConfig, AttnCfg, FFNCfg, MajorityTask, DensityTask,
-                           AttnBlock, FFNBlock)
+                           AttnBlock, FFNBlock, count_params)
 
 # next-token (LM) tasks + the pooled-head (classification / regression) tasks
 ALL_TASKS = {**TASKS, "Majority": MajorityTask, "Density": DensityTask}
@@ -191,6 +191,9 @@ def _split_mask(x, split, ncols=None, frac=0.2):
     cols = x.shape[1] if ncols is None else max(1, min(int(ncols), x.shape[1]))
     flat = x[:, :cols].long()                                # hash the INPUT identity (prompt for LM)
     keys = torch.zeros(x.shape[0], dtype=torch.long)
+    # polynomial rolling hash of the prompt. NB: for long prompts (>~8 tokens) this overflows int64, and
+    # that wraparound is INTENTIONAL — torch wraps two's-complement deterministically, so the split stays
+    # stable + correct in proportion (it only slightly degrades hash uniformity for the longest tasks).
     for c in range(flat.shape[1]):
         keys = keys * 131 + flat[:, c] + 1
     is_test = (keys.abs() % 100) < int(frac * 100)

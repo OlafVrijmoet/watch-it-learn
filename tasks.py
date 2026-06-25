@@ -59,6 +59,11 @@ def _assemble(inp: torch.Tensor, out: torch.Tensor, sep_id, device):
     return x.to(device), y.to(device), seq.to(device)
 
 
+def _digits_msb(nums, k):
+    """The k base-10 digits of each integer, most-significant digit first."""
+    return torch.stack([(nums // (10 ** p)) % 10 for p in range(k - 1, -1, -1)], dim=1)
+
+
 class SeqTask:
     """Base class: provides a default decode(). Subclasses set the attributes above."""
     name = "task"
@@ -122,17 +127,14 @@ class AddTask(SeqTask):
         self.id_to_str[self.PLUS] = "+"
         self.id_to_str[self.EQ] = "="
 
-    def _digits_msb(self, nums, k):
-        return torch.stack([(nums // (10 ** p)) % 10 for p in range(k - 1, -1, -1)], dim=1)
-
     def make_batch(self, batch_size, device="cpu", generator=None):
         hi = 10 ** self.n_digits
         a = torch.randint(0, hi, (batch_size,), generator=generator)
         b = torch.randint(0, hi, (batch_size,), generator=generator)
         s = a + b
         plus = torch.full((batch_size, 1), self.PLUS, dtype=torch.long)
-        inp = torch.cat([self._digits_msb(a, self.n_digits), plus,
-                         self._digits_msb(b, self.n_digits)], dim=1)
+        inp = torch.cat([_digits_msb(a, self.n_digits), plus,
+                         _digits_msb(b, self.n_digits)], dim=1)
         # output digits, least-significant first
         out = torch.stack([(s // (10 ** p)) % 10 for p in range(self.out_len)], dim=1)
         return _assemble(inp, out, self.sep_id, device)
@@ -179,9 +181,6 @@ class ArithmeticTask(SeqTask):
         self.id_to_str = {i: str(i) for i in range(10)}
         self.id_to_str.update({self.PLUS: "+", self.MINUS: "−", self.TIMES: "×", self.EQ: "="})
 
-    def _digits_msb(self, nums, k):
-        return torch.stack([(nums // (10 ** p)) % 10 for p in range(k - 1, -1, -1)], dim=1)
-
     def make_batch(self, batch_size, device="cpu", generator=None):
         hi = 10 ** self.n_digits
         a = torch.randint(0, hi, (batch_size,), generator=generator)
@@ -195,8 +194,8 @@ class ArithmeticTask(SeqTask):
         res = torch.where(pick == self.TIMES, a * b, res)
         a_show = torch.where(pick == self.MINUS, hi_ab, a)
         b_show = torch.where(pick == self.MINUS, lo_ab, b)
-        inp = torch.cat([self._digits_msb(a_show, self.n_digits), pick.unsqueeze(1),
-                         self._digits_msb(b_show, self.n_digits)], dim=1)
+        inp = torch.cat([_digits_msb(a_show, self.n_digits), pick.unsqueeze(1),
+                         _digits_msb(b_show, self.n_digits)], dim=1)
         out = torch.stack([(res // (10 ** p)) % 10 for p in range(self.out_len)], dim=1)   # LSB first
         return _assemble(inp, out, self.sep_id, device)
 
