@@ -32,7 +32,7 @@ import torch
 import torch.nn.functional as F
 
 from tiny_gpt import get_device, generate, evaluate, count_params
-from tasks import TASKS
+from tasks import TASKS, Task
 from training_utils import make_optimizer, _lr_at
 from builder_model import (BuilderModel, BuilderConfig, AttnCfg, FFNCfg, MajorityTask, DensityTask,
                            AttnBlock, FFNBlock)
@@ -101,7 +101,7 @@ class RunConfig:
         return json.dumps(d)
 
 
-def build_task(cfg: RunConfig):
+def build_task(cfg: RunConfig) -> Task:
     if cfg.task_name not in ALL_TASKS:
         raise ValueError(f"unknown task {cfg.task_name!r}; have {list(ALL_TASKS)}")
     return ALL_TASKS[cfg.task_name](**cfg.task_kwargs)
@@ -544,7 +544,7 @@ def _capture_checkpoint(model, task, device, step, cfg) -> Checkpoint:
 
 
 @torch.no_grad()
-def _eval_lm(model, task, device, split="test", batch=512):
+def _eval_lm(model, task: Task, device, split="test", batch=512):
     """(loss, exact-match accuracy) for an LM task on the given split (default = held-out test)."""
     x, y, seq = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
     model.eval()
@@ -556,7 +556,7 @@ def _eval_lm(model, task, device, split="test", batch=512):
 
 
 @torch.no_grad()
-def _eval_pooled(model, task, device, split="test", batch=512):
+def _eval_pooled(model, task: Task, device, split="test", batch=512):
     """(loss, score) for a pooled head on the given split: accuracy (classify) / R^2 (regression)."""
     x, target = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
     out, loss = model(x, target)
@@ -564,7 +564,7 @@ def _eval_pooled(model, task, device, split="test", batch=512):
 
 
 @torch.no_grad()
-def per_category_eval(model, task, device="cpu", batch=512, split="test"):
+def per_category_eval(model, task: Task, device="cpu", batch=512, split="test"):
     """For a task that defines `category_of(x_row, y_row)`, return {category: (accuracy, count)} on the
     given split (default = held-out). Accuracy is exact-match of the generated output (LM) or argmax ==
     label (classify); the counts double as the category distribution. Tasks without `category_of` skip this."""
@@ -578,7 +578,7 @@ def per_category_eval(model, task, device="cpu", batch=512, split="test"):
         correct = (logits.argmax(dim=-1) == y)
     agg = {}
     for i in range(x.shape[0]):
-        cat = task.category_of(x[i], y[i])
+        cat = getattr(task, "category_of")(x[i], y[i])   # opt-in (not on the base Task protocol)
         if cat is None:
             continue
         a = agg.setdefault(cat, [0, 0])
@@ -604,7 +604,7 @@ def train_eval_curve(run):
 # Activation trace (recomputed on demand; JSON-serializable for the D3 viz)
 # ---------------------------------------------------------------------------
 @torch.no_grad()
-def trace_forward(model: BuilderModel, task, seq) -> dict:
+def trace_forward(model: BuilderModel, task: Task, seq) -> dict:
     """Run one eval-mode forward on `seq` and return all the values the viz draws:
     the residual stream at each stage, each attention layer's grid + Q/K/V, each dense
     block's hidden activations, and the next-token logits/probs. Everything is plain

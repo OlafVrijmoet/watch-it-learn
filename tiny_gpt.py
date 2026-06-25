@@ -16,9 +16,13 @@ These operate on any `nn.Module` exposing the `(logits, loss) = model(idx, targe
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
+
+if TYPE_CHECKING:                       # type-hints only; a runtime import would be circular (tasks imports us)
+    from tasks import Task
 
 
 def count_params(model: nn.Module) -> int:
@@ -97,7 +101,7 @@ class SortTask:
 
 
 @torch.no_grad()
-def generate(model: nn.Module, task, seq: torch.Tensor, device) -> torch.Tensor:
+def generate(model: nn.Module, task: Task, seq: torch.Tensor, device) -> torch.Tensor:
     """Greedily decode the output region, given the prompt (input + separator).
 
     Real autoregressive generation: feed the prompt, take the argmax, append it,
@@ -117,7 +121,7 @@ def generate(model: nn.Module, task, seq: torch.Tensor, device) -> torch.Tensor:
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module, task, device, batch_size=512, generator=None):
+def evaluate(model: nn.Module, task: Task, device, batch_size=512, generator=None):
     """Return (loss, exact_match_accuracy, per_token_accuracy) on a fresh batch."""
     was_training = model.training
     model.eval()

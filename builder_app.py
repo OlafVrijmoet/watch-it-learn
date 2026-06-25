@@ -540,18 +540,18 @@ if train_clicked:
     hist = {"step": [], "loss": [], "acc": []}
     _every = max(1, cfg.steps // 100)                         # throttle bar updates to ~100
 
-    def on_step(s, metrics):                                  # bar tracks the ACTUAL step fraction
+    def on_step_one(s, metrics):                             # bar tracks the ACTUAL step fraction
         if s % _every == 0 or s == cfg.steps - 1:
             bar.progress(min(1.0, (s + 1) / cfg.steps), text=f"step {s + 1}/{cfg.steps}")
 
-    def on_ck(ck, all_):                                      # checkpoints (log-spaced) drive the charts
+    def on_ck_one(ck, all_):                                 # checkpoints (log-spaced) drive the charts
         hist["step"].append(ck.step)
         hist["loss"].append(round(ck.eval_loss, 4))
         hist["acc"].append(round(ck.acc, 4))
         lph.line_chart(pd.DataFrame({"loss": hist["loss"]}, index=hist["step"]))
         aph.line_chart(pd.DataFrame({"accuracy": hist["acc"]}, index=hist["step"]))
 
-    ver["run"] = TrainingRun.train(cfg, on_step=on_step, on_checkpoint=on_ck)
+    ver["run"] = TrainingRun.train(cfg, on_step=on_step_one, on_checkpoint=on_ck_one)
     ver["run_sig"] = sig
     st.rerun()
 
@@ -863,7 +863,7 @@ if trained and head_kind == "lm":
                            top_k=top_k, top_p=top_p, device="cpu")[0]
     st.write(f"**prompt** `{task.decode(in_ids[0])}`  →  **model** `{task.decode(out)}`  ·  sampling: **{sampling}**")
     if task_name == "Add":                                    # answer is least-significant-digit first
-        nd = task.n_digits
+        nd = getattr(task, "n_digits")                        # Add-specific (not on the base Task protocol)
         p = in_ids[0].tolist()
         a = int("".join(map(str, p[:nd])))
         b = int("".join(map(str, p[nd + 1:2 * nd + 1])))

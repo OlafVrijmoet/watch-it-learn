@@ -326,6 +326,10 @@ class MajorityTask:
         self.block_size = length
         self.n_classes = 2
         self.id_to_str = {i: str(i) for i in range(n_symbols)}
+        self.prompt_len, self.gen_len = length, 0     # pooled: whole sequence in, no generation (for the Task type)
+
+    def decode(self, ids):
+        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
 
     def make_batch(self, batch_size, device="cpu", generator=None):
         x = torch.randint(0, self.n_symbols, (batch_size, self.length), generator=generator)
@@ -348,6 +352,10 @@ class DensityTask:
         self.block_size = length
         self.out_dim = 1
         self.id_to_str = {i: str(i) for i in range(n_symbols)}
+        self.prompt_len, self.gen_len = length, 0     # pooled: whole sequence in, no generation (for the Task type)
+
+    def decode(self, ids):
+        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
 
     def make_batch(self, batch_size, device="cpu", generator=None):
         x = torch.randint(0, self.n_symbols, (batch_size, self.length), generator=generator)

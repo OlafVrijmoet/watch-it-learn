@@ -1,0 +1,22 @@
+# Type-checking config for pyright / Pylance (the VS Code checker).
+#
+# "basic" matches the editor default. The task interface is typed via the `Task` protocol (tasks.py)
+# and the engine/model functions take `task: Task`, so attribute access on tasks resolves cleanly.
+# Structural checks (undefined names, bad imports, wrong call args, return types) stay ON.
+#
+# The rules below are relaxed because they fire on this project's *legitimate* dynamic patterns, not on
+# bugs (the test suite covers correctness):
+#   - reportAttributeAccessIssue  : Streamlit's `st.session_state` is a dynamic key/value store.
+#   - reportArgumentType          : torch accepts device as str OR torch.device interchangeably.
+#   - reportOptional* / MemberAccess : tensors / grads / a version's `run` are populated after a
+#                                      forward/backward/train pass (Optional until then, guarded where used).
+#   - reportGeneralTypeIssues / reportIndexIssue : iterating / indexing dynamically-built nn.Module containers.
+[tool.pyright]
+typeCheckingMode = "basic"
+reportAttributeAccessIssue = "none"
+reportArgumentType = "none"
+reportOptionalSubscript = "none"
+reportOptionalIterable = "none"
+reportOptionalMemberAccess = "none"
+reportGeneralTypeIssues = "none"
+reportIndexIssue = "none"

@@ -21,9 +21,23 @@ The "Sort" task lives in tiny_gpt.py (the notebook uses it); the others are here
 """
 from __future__ import annotations
 
+from typing import Protocol
+
 import torch
 
 from tiny_gpt import SortTask   # re-exported in the registry below
+
+
+class Task(Protocol):
+    """Structural type for any task (the LM tasks here + Majority/Density in builder_model). Tasks match it
+    by shape — no inheritance required — so the training/eval/replay code can annotate `task: Task`."""
+    vocab_size: int
+    block_size: int
+    prompt_len: int
+    gen_len: int
+    id_to_str: dict
+    def make_batch(self, batch_size, device=..., generator=...) -> tuple[torch.Tensor, ...]: ...
+    def decode(self, ids) -> str: ...
 
 
 def _assemble(inp: torch.Tensor, out: torch.Tensor, sep_id, device):
@@ -50,6 +64,7 @@ class SeqTask:
     name = "task"
     description = ""
     params: dict = {}
+    id_to_str: dict = {}                  # subclasses populate this in __init__
 
     def decode(self, ids) -> str:
         return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
