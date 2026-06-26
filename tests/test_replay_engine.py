@@ -15,13 +15,12 @@ Run with:  PYTHONPATH=. python tests/test_replay_engine.py (from the repo root)
 from __future__ import annotations
 
 import json
-import math
 
 import torch
 
 from replay_engine import (
     RunConfig, TrainingRun, log_spaced_steps, trace_forward, sample_token,
-    generate_sampled, build_task, per_category_eval,
+    generate_sampled, per_category_eval,
 )
 
 

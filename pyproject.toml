@@ -21,3 +21,14 @@ reportOptionalIterable = "none"
 reportOptionalMemberAccess = "none"
 reportGeneralTypeIssues = "none"
 reportIndexIssue = "none"
+
+
+# Linter (ruff). Focused on correctness, not style: the "F" (pyflakes) rules catch unused imports,
+# dead variables, redefinitions, and f-string mistakes — the class of issue a type checker in basic
+# mode does not report. Formatting / line length is left to the author (the code uses long, descriptive
+# lines on purpose).
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["F"]
