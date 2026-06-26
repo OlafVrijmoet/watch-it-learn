@@ -1,0 +1,49 @@
+name: security
+
+# Two independent checks:
+#   pip-audit — scans installed dependencies for known CVEs (Software Composition Analysis)
+#   bandit    — static scan of our own source for insecure code patterns (SAST)
+on:
+  push:
+  pull_request:
+  workflow_dispatch:        # allow manual runs from the Actions tab
+  schedule:
+    - cron: "0 6 * * 1"     # weekly (Mon 06:00 UTC): catch CVEs disclosed since the last push
+
+permissions:
+  contents: read            # least privilege — these jobs only read the code
+
+jobs:
+  pip-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Audit installed packages against the advisory DB
+        run: |
+          pip install pip-audit
+          pip-audit
+
+  bandit:
+    name: Static security scan (bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Scan source for insecure patterns
+        run: |
+          pip install bandit
+          # --severity-level medium ignores low-severity noise (e.g. B101 assert in model code);
+          # tests are excluded since they legitimately use asserts.
+          bandit -r . -x ./tests --severity-level medium
