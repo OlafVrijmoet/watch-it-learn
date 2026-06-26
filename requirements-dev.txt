@@ -1,5 +1,5 @@
 # Dev/test dependencies (the runtime deps + tools the tests need)
 -r requirements.txt
 cairosvg==2.9.0   # used by flow_svg.render_png + test_flow_svg.py to rasterize the SVG to PNG
-pyright==1.1.390  # type checker (same engine as the VS Code Pylance extension)
+pyright==1.1.411  # type checker (same engine as the VS Code Pylance extension)
 ruff==0.15.20     # linter (correctness rules; config in pyproject.toml [tool.ruff])
