@@ -98,4 +98,4 @@ Inspired by two interactive ML explainers I admire:
 - **[Transformer Explainer](https://poloclub.github.io/transformer-explainer/)** (Polo Club of Data Science): a live, interactive look inside a working transformer.
 - **[TensorFlow Playground](https://playground.tensorflow.org)**: the original "tinker with a neural net in the browser and watch it learn."
 
-Both are browser-based; this is an independent Python/Streamlit take on the same teaching goal. No code was reused from either.
+Both are browser-based; this is an independent Python/Streamlit take on the same teaching goal.
