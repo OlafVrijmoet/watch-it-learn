@@ -120,6 +120,31 @@ def _node_row(cx, y, vals, mx, *, row_w=70, cap=14, r=None, gvals=None, gmax=1.0
     return svg, [(xs[k], y) for k in range(m)]
 
 
+def _band_sequence(stages):
+    """The (type, layer_index, stage_index) order of sublayers, derived from the trace's stage labels.
+    Pure + unit-testable: 'attn' in a stage label -> an attention band, otherwise an FFN band."""
+    subs, ai, di = [], 0, 0
+    for k in range(1, len(stages)):
+        if "attn" in stages[k]["label"].lower():
+            subs.append(("attn", ai, k)); ai += 1
+        else:
+            subs.append(("ffn", di, k)); di += 1
+    return subs
+
+
+def _grad_normalizers(grads):
+    """Max gradient magnitudes (vector / head-QKV / FFN-neuron) used to normalize the overlay.
+    Returns zeros when there are no gradients. Pure."""
+    if not grads:
+        return 0.0, 0.0, 0.0
+    gvmax = max([grads["embed"], grads["head"]] + [a["all"] for a in grads["attn"]]
+                + [f["all"] for f in grads["ffn"]] + [1e-9])
+    ghmax = max([1e-9] + [hh[p] for a in grads["attn"] for hh in a.get("heads", [])
+                          for p in ("q", "k", "v")])
+    gfnmax = max([1e-9] + [u for f in grads["ffn"] for ln in f.get("neurons", []) for u in ln])
+    return gvmax, ghmax, gfnmax
+
+
 def model_svg(trace: dict, readout_pos=None, grads=None) -> tuple[str, int, int]:
     """The whole model as a vertical stack: residual-stream rows (tall vectors) with an
     ATTENTION band or FEED-FORWARD band between each, for ANY number/order of sublayers
@@ -130,21 +155,8 @@ def model_svg(trace: dict, readout_pos=None, grads=None) -> tuple[str, int, int]
     dm = len(stages[0]["residual"][0])
     amx = lambda M: max((abs(v) for r in M for v in r), default=1.0)
 
-    gvmax = ghmax = gfnmax = 0.0                             # gradient overlay normalizers
-    if grads:
-        gvmax = max([grads["embed"], grads["head"]] + [a["all"] for a in grads["attn"]]
-                    + [f["all"] for f in grads["ffn"]] + [1e-9])
-        ghmax = max([1e-9] + [hh[p] for a in grads["attn"] for hh in a.get("heads", [])
-                              for p in ("q", "k", "v")])
-        gfnmax = max([1e-9] + [u for f in grads["ffn"] for ln in f.get("neurons", []) for u in ln])
-
-    subs = []                                                # (type, layer_index, stage_index)
-    ai = di = 0
-    for k in range(1, len(stages)):
-        if "attn" in stages[k]["label"].lower():
-            subs.append(("attn", ai, k)); ai += 1
-        else:
-            subs.append(("ffn", di, k)); di += 1
+    gvmax, ghmax, gfnmax = _grad_normalizers(grads)          # gradient overlay normalizers
+    subs = _band_sequence(stages)                            # (type, layer_index, stage_index) per sublayer
     nh_max = max((len(a["weights"]) for a in trace["attention"]), default=1)
     qk_mx = max((abs(v) for a in trace["attention"] for M in (a["q"], a["k"], a["v"])
                  for hh in M for r in hh for v in r), default=1.0)

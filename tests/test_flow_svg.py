@@ -15,7 +15,8 @@ import tempfile
 import torch
 
 from replay_engine import RunConfig, TrainingRun, trace_forward, layer_gradients, sample_train_batch
-from flow_svg import model_svg, flow_svg_component, svg_document, render_png
+from flow_svg import (model_svg, flow_svg_component, svg_document, render_png,
+                      _band_sequence, _grad_normalizers)
 
 
 def _run(d_model=24, n_heads=3, length=3):
@@ -68,6 +69,17 @@ def test_gradient_overlay_renders():
     tr = trace_forward(m, task, seq[0])
     assert "∇" in model_svg(tr, grads=grads)[0]            # ∇ badges drawn with grads
     assert "∇" not in model_svg(tr)[0]                     # back-compat: none without grads
+
+
+def test_band_sequence_from_labels():
+    """_band_sequence reads the stage labels into ordered (type, layer_index, stage_index) sublayers."""
+    stages = [{"label": "embed"}, {"label": "attn 1"}, {"label": "ffn 1"}, {"label": "attn 2"}]
+    assert _band_sequence(stages) == [("attn", 0, 1), ("ffn", 0, 2), ("attn", 1, 3)]
+
+
+def test_grad_normalizers_empty():
+    """_grad_normalizers returns zeros when there are no gradients (the no-overlay path)."""
+    assert _grad_normalizers(None) == (0.0, 0.0, 0.0)
 
 
 if __name__ == "__main__":
