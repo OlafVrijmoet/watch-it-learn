@@ -12,10 +12,10 @@ import numpy as np
 import torch
 
 from tasks import TASKS, Task
-from builder_model import BuilderModel, BuilderConfig, AttnCfg, FFNCfg, MajorityTask, DensityTask
+from builder_model import BuilderModel, BuilderConfig, AttnCfg, FFNCfg
 
-# next-token (LM) tasks + the pooled-head (classification / regression) tasks
-ALL_TASKS = {**TASKS, "Majority": MajorityTask, "Density": DensityTask}
+# every task (LM next-token + the pooled classification / regression heads), keyed by name
+ALL_TASKS = TASKS
 
 # Seed offsets — each carves an independent-but-deterministic RNG stream off cfg.seed, so they never
 # collide with the model-init RNG or with each other (named so the intent + the spacing are legible).

@@ -18,7 +18,7 @@ import pandas as pd
 import streamlit as st
 import torch
 
-from replay_engine import (RunConfig, TrainingRun, build_model, build_task, trace_forward,
+from replay_engine import (TrainingRun, build_model, build_task, trace_forward,
                            generate_sampled, ALL_TASKS, is_heldout,
                            layer_gradients, sample_train_batch, exact_train_batch, train_eval_curve,
                            continue_training, gradient_scale, per_category_eval)
@@ -26,7 +26,7 @@ from flow_svg import flow_svg_component, model_svg, svg_document, replay_html
 from flow_component import flow_html, component_height
 from training_utils import divisor_heads, suggest_lr_transformer
 from app_charts import _show, _metric_chart, _grad_bars
-from app_state import version_layer_specs, _build_cfg
+from app_state import _build_cfg
 
 # seed bases for the gradient-inspection batches (named so the independent streams are legible)
 SCRUB_BATCH_BASE = 70000     # the "scrub a batch" gradient slider

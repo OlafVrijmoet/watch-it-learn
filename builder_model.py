@@ -103,12 +103,10 @@ class ConfigurableAttention(nn.Module):
         mask = torch.tril(torch.ones(block_size, block_size))
         self.register_buffer("causal_mask", mask.view(1, 1, block_size, block_size))
         self.last_attn = None
-        self.last_qkv = None
 
     def forward(self, x):
         B, T, C = x.shape
         qkv = self.qkv(x)
-        self.last_qkv = qkv.detach()
         q, k, v = qkv.split(C, dim=2)
         q = q.view(B, T, self.n_heads, self.d_k).transpose(1, 2)
         k = k.view(B, T, self.n_heads, self.d_k).transpose(1, 2)
@@ -312,58 +310,6 @@ def count_params(m) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Tiny tasks for the pooled heads (classification / regression on whole sequences)
-# ---------------------------------------------------------------------------
-class MajorityTask:
-    """Binary classification: is symbol '1' the majority of the sequence?"""
-    name = "Majority"
-    kind = "classify"
-
-    def __init__(self, length=13, n_symbols=2):
-        self.length = length
-        self.n_symbols = n_symbols
-        self.vocab_size = n_symbols
-        self.block_size = length
-        self.n_classes = 2
-        self.id_to_str = {i: str(i) for i in range(n_symbols)}
-        self.prompt_len, self.gen_len = length, 0     # pooled: whole sequence in, no generation (for the Task type)
-
-    def decode(self, ids):
-        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
-
-    def make_batch(self, batch_size, device="cpu", generator=None):
-        x = torch.randint(0, self.n_symbols, (batch_size, self.length), generator=generator)
-        label = (x.sum(dim=1) * 2 > self.length).long()         # majority of 1s
-        return x.to(device), label.to(device)
-
-    def category_of(self, x_row, y_row):          # per-category breakdown: split by the true class
-        return "majority of 1s" if int(y_row) == 1 else "majority of 0s"
-
-
-class DensityTask:
-    """Regression: predict the fraction of '1's in the sequence (a number in [0, 1])."""
-    name = "Density"
-    kind = "regression"
-
-    def __init__(self, length=12, n_symbols=2):
-        self.length = length
-        self.n_symbols = n_symbols
-        self.vocab_size = n_symbols
-        self.block_size = length
-        self.out_dim = 1
-        self.id_to_str = {i: str(i) for i in range(n_symbols)}
-        self.prompt_len, self.gen_len = length, 0     # pooled: whole sequence in, no generation (for the Task type)
-
-    def decode(self, ids):
-        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
-
-    def make_batch(self, batch_size, device="cpu", generator=None):
-        x = torch.randint(0, self.n_symbols, (batch_size, self.length), generator=generator)
-        target = x.float().mean(dim=1, keepdim=True)            # [B, 1]
-        return x.to(device), target.to(device)
-
-
-# ---------------------------------------------------------------------------
 # A tiny generic train/eval (handles lm / classify / regression) - for demos & tests
 # ---------------------------------------------------------------------------
 def quick_train(model: BuilderModel, task, steps=300, lr=3e-3, batch=128, seed=0, device="cpu"):
@@ -402,6 +348,8 @@ def quick_eval(model: BuilderModel, task, batch=512, device="cpu", seed=1):
 
 
 if __name__ == "__main__":
+    from tasks import MajorityTask, DensityTask     # the pooled-head tasks live in tasks.py now
+
     # classification demo
     task = MajorityTask(length=13)
     cfg = BuilderConfig(vocab_size=task.vocab_size, block_size=task.block_size, d_model=32, n_heads=4,

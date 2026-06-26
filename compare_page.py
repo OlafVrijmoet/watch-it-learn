@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from replay_engine import train_eval_curve, layer_gradients, sample_train_batch, exact_train_batch
+from app_charts import _show
 
 VERSION_COLORS = ["#2563eb", "#ef4444", "#7c3aed", "#059669", "#d97706", "#db2777"]
 
@@ -93,8 +94,7 @@ def _chart(vs, which, title, h=3.0):
     fig, ax = plt.subplots(figsize=(5, h))
     _plot(ax, vs, which, title)
     fig.tight_layout()
-    st.pyplot(fig)
-    plt.close(fig)
+    _show(st, fig)
 
 
 if view == "Overlay":
@@ -134,7 +134,7 @@ with gg1:                                         # total ‖∇‖ over trainin
     if log_g:
         ax.set_yscale("log")
     ax.legend(fontsize=7, frameon=False)
-    fig.tight_layout(); st.pyplot(fig); plt.close(fig)
+    fig.tight_layout(); _show(st, fig)
 
 with gg2:                                         # ‖∇‖ per block, final step (grouped by version)
     cats = ["embed", "Q", "K", "V", "O", "FFN", "head"] if per_comp else ["embed", "attention", "FFN", "head"]
@@ -151,7 +151,7 @@ with gg2:                                         # ‖∇‖ per block, final s
     if log_g:
         ax.set_xscale("log")
     ax.legend(fontsize=7, frameon=False)
-    fig.tight_layout(); st.pyplot(fig); plt.close(fig)
+    fig.tight_layout(); _show(st, fig)
 
 st.divider()
 rows = []

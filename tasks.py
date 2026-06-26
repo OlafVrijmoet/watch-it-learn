@@ -290,7 +290,7 @@ SORT_ID_TO_STR[SORT_SEP] = "|"
 
 
 @dataclass
-class SortTask:
+class SortTask(SeqTask):
     n_digits: int = 6           # how many digits to sort
     vocab_size: int = 11        # digits 0..9  +  SEP
 
@@ -311,9 +311,6 @@ class SortTask:
     def gen_len(self) -> int:
         return self.n_digits             # how many tokens to generate
 
-    def decode(self, ids) -> str:
-        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
-
     def make_batch(self, batch_size: int, device="cpu", generator=None):
         """Return (x, y, seq): seq = [input | SEP | sorted]; loss only on the sorted-output region.
         Distinct digits per row come from argsort-ing random keys and taking the first n."""
@@ -330,6 +327,57 @@ class SortTask:
 
 
 # ---------------------------------------------------------------------------
+# Pooled-head tasks: whole-sequence classification / regression on random binary strings.
+# They drive the classify / regression output heads (no generation) and share PooledTask.
+# ---------------------------------------------------------------------------
+class PooledTask(SeqTask):
+    """Shared base for the pooled (whole-sequence) tasks: random length-`length` symbol strings."""
+    def __init__(self, length, n_symbols=2):
+        self.length = length
+        self.n_symbols = n_symbols
+        self.vocab_size = n_symbols
+        self.block_size = length
+        self.prompt_len, self.gen_len = length, 0   # whole sequence in, no generation (for the Task type)
+        self.id_to_str = {i: str(i) for i in range(n_symbols)}
+
+    def _random(self, batch_size, generator):
+        return torch.randint(0, self.n_symbols, (batch_size, self.length), generator=generator)
+
+
+class MajorityTask(PooledTask):
+    """Binary classification: is symbol '1' the majority of the sequence?"""
+    name = "Majority"
+    kind = "classify"
+
+    def __init__(self, length=13, n_symbols=2):
+        super().__init__(length, n_symbols)
+        self.n_classes = 2
+
+    def make_batch(self, batch_size, device="cpu", generator=None):
+        x = self._random(batch_size, generator)
+        label = (x.sum(dim=1) * 2 > self.length).long()         # majority of 1s
+        return x.to(device), label.to(device)
+
+    def category_of(self, x_row, y_row):          # per-category breakdown: split by the true class
+        return "majority of 1s" if int(y_row) == 1 else "majority of 0s"
+
+
+class DensityTask(PooledTask):
+    """Regression: predict the fraction of '1's in the sequence (a number in [0, 1])."""
+    name = "Density"
+    kind = "regression"
+
+    def __init__(self, length=12, n_symbols=2):
+        super().__init__(length, n_symbols)
+        self.out_dim = 1
+
+    def make_batch(self, batch_size, device="cpu", generator=None):
+        x = self._random(batch_size, generator)
+        target = x.float().mean(dim=1, keepdim=True)            # [B, 1]
+        return x.to(device), target.to(device)
+
+
+# ---------------------------------------------------------------------------
 # Registry + a helper to render one example for the UI.
 # ---------------------------------------------------------------------------
 TASKS = {
@@ -338,6 +386,8 @@ TASKS = {
     "Add": AddTask,
     "Arithmetic": ArithmeticTask,
     "Index": IndexTask,
+    "Majority": MajorityTask,
+    "Density": DensityTask,
 }
 
 

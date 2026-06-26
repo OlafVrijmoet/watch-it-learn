@@ -10,9 +10,9 @@ import torch
 
 from builder_model import (
     BuilderConfig, AttnCfg, FFNCfg, BuilderModel, Pooling, count_params,
-    MajorityTask, DensityTask, quick_train, quick_eval,
+    quick_train, quick_eval,
 )
-from tasks import ReverseTask
+from tasks import ReverseTask, MajorityTask, DensityTask
 from lm_utils import evaluate
 
 

@@ -49,7 +49,7 @@ def grid_color(w: float) -> str:
 
 def _vector(x, y, vals, cw, ch, mx, outline="#cbd2dc", tip=""):
     """A tall colored vector (column of cells), top-left at (x,y). Returns SVG string."""
-    out = [f'<g>']
+    out = ['<g>']
     for i, v in enumerate(vals):
         title = f"{tip} [{i}] = {v:.3f}" if tip else f"{v:.3f}"
         out.append(
@@ -116,7 +116,7 @@ def _node_row(cx, y, vals, mx, *, row_w=70, cap=14, r=None, gvals=None, gmax=1.0
         f'<circle class="cell" cx="{xs[k]:.1f}" cy="{y:.1f}" r="{rad:.1f}" fill="{div_color(vals[idx[k]], mx)}" '
         f'stroke="#cbd2dc" stroke-width="0.3" data-tip="{vals[idx[k]]:.3f}'
         + (f"  ∇ {gvals[idx[k]]:.3f}" if (gvals is not None and idx[k] < len(gvals)) else "")
-        + f'"/>' for k in range(m))
+        + '"/>' for k in range(m))
     return svg, [(xs[k], y) for k in range(m)]
 
 
@@ -160,7 +160,6 @@ def model_svg(trace: dict, readout_pos=None, grads=None) -> tuple[str, int, int]
     nh_max = max((len(a["weights"]) for a in trace["attention"]), default=1)
     qk_mx = max((abs(v) for a in trace["attention"] for M in (a["q"], a["k"], a["v"])
                  for hh in M for r in hh for v in r), default=1.0)
-    head_cols = [Q_COL, V_COL, K_COL, "#a855f7", "#e11d48", "#0891b2"]
 
     gcell = 24
     grid = T * gcell
