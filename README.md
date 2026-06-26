@@ -73,9 +73,10 @@ done
 |--------|------|
 | `app.py` | entry point — the two-page nav (🛠 Builder · 📊 Compare) |
 | `builder_app.py` | the **Builder** page — the build canvas, Build / Train / Run sidebar, and Versions panel |
+| `app_charts.py` · `app_state.py` | pure helpers carved out of the Builder page (matplotlib charts; config/spec builders) |
 | `compare_page.py` | the **Compare** page — multi-version curves, gradient-flow comparison, status table |
 | `builder_model.py` | the configurable transformer (`BuilderModel` + per-layer configs) |
-| `replay_engine.py` | training with recorded history, exact reconstruction, on-the-fly gradients |
+| `replay_engine/` | the training-replay engine, split by cohesion (config · splits · gradients · training · trace · sampling) |
 | `flow_svg.py` | the SVG renderer — whole-model view, gradient overlay, training replay |
 | `flow_component.py` | heatmap view for the pooled (classification / regression) heads |
 | `tasks.py` | the task family (Reverse, Add, Arithmetic, Index, …) |
