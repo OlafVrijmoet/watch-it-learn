@@ -2,12 +2,16 @@
 
 **Assemble a tiny transformer block-by-block, train it, and scrub the entire training run, watching attention, activations, and gradients evolve step by step.** A hands-on microscope for *how* a transformer learns, built as a single Streamlit app.
 
+![watch-it-learn: build a tiny transformer, train it, and scrub the run to watch attention and gradients evolve](docs/demo.gif)
+
+[![tests](https://github.com/OlafVrijmoet/watch-it-learn/actions/workflows/ci.yml/badge.svg)](https://github.com/OlafVrijmoet/watch-it-learn/actions/workflows/ci.yml)
+[![security](https://github.com/OlafVrijmoet/watch-it-learn/actions/workflows/security.yml/badge.svg)](https://github.com/OlafVrijmoet/watch-it-learn/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
 
 **Built with** PyTorch · Streamlit · NumPy · pandas · Matplotlib · cairosvg
 
-**▶ Live demo:** _coming soon (Streamlit Community Cloud)_
+**▶ Live demo:** [watch-it-learn.streamlit.app](https://watch-it-learn.streamlit.app)
 
 ---
 
