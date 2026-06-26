@@ -2,8 +2,10 @@
 
 **Assemble a tiny transformer block-by-block, train it, and scrub the entire training run, watching attention, activations, and gradients evolve step by step.** A hands-on microscope for *how* a transformer learns, built as a single Streamlit app.
 
-<!-- TODO: hero GIF (build → train → scrub stages → gradient flow) -->
-<!-- ![demo](docs/demo.gif) -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
+
+**Built with** PyTorch · Streamlit · NumPy · pandas · Matplotlib · cairosvg
 
 **▶ Live demo:** _coming soon (Streamlit Community Cloud)_
 
@@ -85,6 +87,11 @@ done
 
 This grew out of a "teach a tiny GPT to sort" notebook and a TensorFlow-Playground-style 2D classifier experiment. Both were scaffolding for the real goal of *seeing* training happen, and were retired once the builder + replay engine could show the whole story interactively.
 
----
+## Acknowledgments
 
-<!-- TODO: GitHub repo + push, Streamlit Community Cloud deploy, GIF/screenshots in docs/ -->
+Inspired by two interactive ML explainers I admire:
+
+- **[Transformer Explainer](https://poloclub.github.io/transformer-explainer/)** (Polo Club of Data Science): a live, interactive look inside a working transformer.
+- **[TensorFlow Playground](https://playground.tensorflow.org)**: the original "tinker with a neural net in the browser and watch it learn."
+
+Both are browser-based; this is an independent Python/Streamlit take on the same teaching goal. No code was reused from either.
