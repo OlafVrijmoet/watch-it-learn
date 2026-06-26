@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 import torch
 import torch.nn.functional as F
 
-from tiny_gpt import get_device, generate
+from lm_utils import get_device, generate
 from tasks import Task
 from training_utils import make_optimizer, _lr_at
 from builder_model import BuilderModel, count_params

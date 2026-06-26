@@ -398,7 +398,7 @@ def quick_eval(model: BuilderModel, task, batch=512, device="cpu", seed=1):
         mse = float(F.mse_loss(out, target).item())
         var = float(target.var().item()) + 1e-9
         return {"mse": mse, "r2": 1.0 - mse / var}          # R^2: 1.0 = perfect
-    raise ValueError("use tiny_gpt.evaluate for lm tasks")
+    raise ValueError("use lm_utils.evaluate for lm tasks")
 
 
 if __name__ == "__main__":

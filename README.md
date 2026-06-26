@@ -76,8 +76,8 @@ done
 | `replay_engine/` | the training-replay engine, split by cohesion (config · splits · gradients · training · trace · sampling) |
 | `flow_svg.py` | the SVG renderer: whole-model view, gradient overlay, training replay |
 | `flow_component.py` | heatmap view for the pooled (classification / regression) heads |
-| `tasks.py` | the task family (Reverse, Add, Arithmetic, Index, …) |
-| `tiny_gpt.py` | minimal GPT primitives + the Sort task |
+| `tasks.py` | the task family (Sort, Reverse, Add, Arithmetic, Index, …) |
+| `lm_utils.py` | task-generic LM helpers (`generate` / `evaluate` / `get_device`) |
 | `training_utils.py` | optimizer factory, LR schedule, hyperparameter heuristics |
 | `tests/` | the test suite (`PYTHONPATH=. python tests/<name>.py`) |
 

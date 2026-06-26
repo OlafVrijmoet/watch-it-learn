@@ -40,7 +40,7 @@ def generate_sampled(model, task, seq, method="greedy", temperature=1.0, top_k=0
     """Autoregressively generate the output region with the chosen sampling method.
 
     Works for a batch: each row is sampled independently. With method='greedy' this is
-    exactly the argmax decoding in tiny_gpt.generate.
+    exactly the argmax decoding in lm_utils.generate.
     """
     p = task.prompt_len
     gen = torch.Generator().manual_seed(seed)

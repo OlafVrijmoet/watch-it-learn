@@ -240,7 +240,7 @@ def test_generate_sampled_greedy_matches_argmax():
     task = run.task
     model = run.reconstruct(run.checkpoint_steps[-1])
     _, _, seq = task.make_batch(3, generator=torch.Generator().manual_seed(9))
-    from tiny_gpt import generate as greedy_generate
+    from lm_utils import generate as greedy_generate
     out_greedy = greedy_generate(model, task, seq, "cpu")
     out_sampled = generate_sampled(model, task, seq, "greedy", device="cpu")
     assert torch.equal(out_greedy, out_sampled)

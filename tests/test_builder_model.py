@@ -13,7 +13,7 @@ from builder_model import (
     MajorityTask, DensityTask, quick_train, quick_eval,
 )
 from tasks import ReverseTask
-from tiny_gpt import evaluate
+from lm_utils import evaluate
 
 
 def _lm_cfg(task, **kw):

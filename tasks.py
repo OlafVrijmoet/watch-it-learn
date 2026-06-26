@@ -17,15 +17,14 @@ treat them uniformly:
 `prompt_len` = how many tokens are fed before generation starts (input + the SEP);
 `gen_len`    = how many tokens the model must produce.
 
-The "Sort" task lives in tiny_gpt.py (the notebook uses it); the others are here.
+The Sort task began as a "teach a tiny GPT to sort" notebook; it and the rest of the family live here.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
 
 import torch
-
-from tiny_gpt import SortTask   # re-exported in the registry below
 
 
 class Task(Protocol):
@@ -277,6 +276,57 @@ class IndexTask(SeqTask):
         answer = data[rows, idx].unsqueeze(1)
         inp = torch.cat([data, idx_tok], dim=1)
         return _assemble(inp, answer, None, device)
+
+
+# ---------------------------------------------------------------------------
+# Sort: sort short sequences of DISTINCT digits, as next-token prediction (the project's first task).
+# Distinct digits make each sorted output token map to exactly ONE input position, so the attention
+# pattern is crisp: "to emit the k-th smallest, look at the input position holding it".
+#   layout:  d d d d d d | s s s s s s   (input | SEP | sorted)
+# ---------------------------------------------------------------------------
+SORT_SEP = 10                                  # separator token id (digits use ids 0..9)
+SORT_ID_TO_STR = {i: str(i) for i in range(10)}
+SORT_ID_TO_STR[SORT_SEP] = "|"
+
+
+@dataclass
+class SortTask:
+    n_digits: int = 6           # how many digits to sort
+    vocab_size: int = 11        # digits 0..9  +  SEP
+
+    name = "Sort"
+    description = "Sort the input digits into ascending order."
+    params = {"n_digits": (4, 9, 6)}   # {kwarg: (min, max, default)} for the UI
+    id_to_str = SORT_ID_TO_STR
+
+    @property
+    def block_size(self) -> int:
+        return self.n_digits * 2 + 1     # input + separator + output
+
+    @property
+    def prompt_len(self) -> int:
+        return self.n_digits + 1         # input digits + the separator (fed before generating)
+
+    @property
+    def gen_len(self) -> int:
+        return self.n_digits             # how many tokens to generate
+
+    def decode(self, ids) -> str:
+        return " ".join(self.id_to_str.get(int(i), "?") for i in ids)
+
+    def make_batch(self, batch_size: int, device="cpu", generator=None):
+        """Return (x, y, seq): seq = [input | SEP | sorted]; loss only on the sorted-output region.
+        Distinct digits per row come from argsort-ing random keys and taking the first n."""
+        n, B = self.n_digits, batch_size
+        keys = torch.rand(B, 10, generator=generator)
+        unsorted = keys.argsort(dim=1)[:, :n]              # [B, n] distinct ids in 0..9
+        sorted_, _ = unsorted.sort(dim=1)
+        sep = torch.full((B, 1), SORT_SEP, dtype=torch.long)
+        seq = torch.cat([unsorted, sep, sorted_], dim=1)   # [B, 2n+1]
+        x = seq[:, :-1].contiguous()      # everything but the last token
+        y = seq[:, 1:].clone()            # next token at each position
+        y[:, :n] = -100                   # only learn on the sorted-output region
+        return x.to(device), y.to(device), seq.to(device)
 
 
 # ---------------------------------------------------------------------------
