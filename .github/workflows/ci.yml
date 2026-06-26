@@ -1,0 +1,40 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Type check (pyright)
+        run: pyright
+
+      - name: Fast test suite
+        env:
+          MPLBACKEND: Agg
+          PYTHONPATH: .
+        run: |
+          set -e
+          # The fast suites — quick, reliable signal for the badge.
+          for t in test_replay_engine test_builder_model test_flow_svg test_flow_component; do
+            python tests/$t.py
+          done
+
+      - name: Integration test (slow — Streamlit AppTest trains many models)
+        env:
+          MPLBACKEND: Agg
+          PYTHONPATH: .
+        run: python tests/test_builder_app.py

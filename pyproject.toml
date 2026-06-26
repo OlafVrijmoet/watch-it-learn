@@ -13,6 +13,7 @@
 #   - reportGeneralTypeIssues / reportIndexIssue : iterating / indexing dynamically-built nn.Module containers.
 [tool.pyright]
 typeCheckingMode = "basic"
+exclude = ["tests"]              # the test suite is verified by running it; pyright checks the source modules
 reportAttributeAccessIssue = "none"
 reportArgumentType = "none"
 reportOptionalSubscript = "none"
