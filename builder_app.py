@@ -317,6 +317,13 @@ def _active_config():
     return {base: st.session_state.get(base, DEFAULTS[base]) for base in CONFIG_KEYS}
 
 
+def _shared_config():
+    """The shared task + training protocol as a dict — the single boundary for the Train-tab module-level
+    values, so _build_cfg doesn't read them as globals (keeps the config builder pure / testable / movable)."""
+    return dict(task_name=task_name, task_kwargs=task_kwargs, head=head_kind, steps=steps, batch=batch,
+                lr=lr, optimizer=optimizer, lr_schedule=lr_schedule, n_checkpoints=n_checkpoints, dev=dev)
+
+
 def version_layer_specs(arch_, c):
     """layer_specs for ANY version (the single source of truth): per-section settings persist by their
     unique _id; defaults come from `c`. Reads live widget values, so a setting change shows immediately
@@ -349,25 +356,27 @@ def version_layer_specs(arch_, c):
     return tuple(specs)
 
 
-def _build_cfg(c, arch_):
-    """A RunConfig from a per-version config dict `c` (architecture / init / output) + its arch, plus the
-    SHARED task and training protocol (steps/batch/lr/optimizer/schedule/checkpoints/device) from the Train tab."""
-    pool = c["pool_sel"] if head_kind in ("classify", "regression") else "last"
-    return RunConfig(task_name=task_name, task_kwargs=task_kwargs,
+def _build_cfg(c, arch_, shared):
+    """A RunConfig from a per-version config dict `c` (architecture / init / output) + its arch + the SHARED
+    task/training-protocol dict (steps/batch/lr/optimizer/schedule/checkpoints/device + task/head). Reads only
+    its arguments (plus live st.session_state for per-section overrides) — no builder_app module globals —
+    so it's testable and could move out of the app module."""
+    pool = c["pool_sel"] if shared["head"] in ("classify", "regression") else "last"
+    return RunConfig(task_name=shared["task_name"], task_kwargs=shared["task_kwargs"],
                      layer_specs=version_layer_specs(arch_, c),
                      d_model=c["d_model"], n_heads=c["n_heads"], dropout=c["def_dropout"],
-                     steps=steps, batch=batch, lr=lr, optimizer=optimizer,
-                     lr_schedule=lr_schedule, head=head_kind, pooling=pool,
+                     steps=shared["steps"], batch=shared["batch"], lr=shared["lr"], optimizer=shared["optimizer"],
+                     lr_schedule=shared["lr_schedule"], head=shared["head"], pooling=pool,
                      pos_encoding=c["pos_encoding"], init=c["init_scheme"], init_scale=c["init_scale"],
-                     seed=c["seed"], n_checkpoints=n_checkpoints, device=dev)
+                     seed=c["seed"], n_checkpoints=shared["n_checkpoints"], device=shared["dev"])
 
 
 def make_cfg():                                              # the active version's RunConfig (live widgets)
-    return _build_cfg(_active_config(), arch)
+    return _build_cfg(_active_config(), arch, _shared_config())
 
 
 def version_cfg(v):                                         # any version's RunConfig (its saved config + arch)
-    return _build_cfg({**DEFAULTS, **(v.get("config") or {})}, v["arch"])
+    return _build_cfg({**DEFAULTS, **(v.get("config") or {})}, v["arch"], _shared_config())
 
 
 cfg = make_cfg()
