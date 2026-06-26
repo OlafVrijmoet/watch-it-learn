@@ -163,12 +163,22 @@ def _cpu_state(model) -> dict:
     return {k: v.detach().to("cpu").clone() for k, v in model.state_dict().items()}
 
 
-def _grad_norm(model) -> float:
-    total = 0.0
-    for p in model.parameters():
+def param_grad_norm(params) -> float:
+    """L2 norm of the gradients across a group of parameters (skips params whose grad is None)."""
+    s = 0.0
+    for p in params:
         if p.grad is not None:
-            total += float(p.grad.detach().pow(2).sum().item())
-    return total ** 0.5
+            s += float(p.grad.detach().pow(2).sum().item())
+    return s ** 0.5
+
+
+def tensor_norm(t) -> float:
+    """L2 norm of a single tensor (e.g. a slice of a gradient)."""
+    return float(t.pow(2).sum().item()) ** 0.5
+
+
+def _grad_norm(model) -> float:
+    return param_grad_norm(model.parameters())
 
 
 def _token_accuracy(logits, y) -> float:
@@ -239,21 +249,13 @@ def split_batch(task, batch_size, device, generator, split):
 def _grad_norms(model) -> dict:
     """Per-block L2 gradient norms aligned with the flow bands; call AFTER loss.backward()."""
     dm = model.cfg.d_model
-
-    def gnorm(ps):
-        s = 0.0
-        for p in ps:
-            if p.grad is not None:
-                s += float(p.grad.detach().pow(2).sum().item())
-        return s ** 0.5
+    gnorm, nrm = param_grad_norm, tensor_norm    # reuse the module-level helpers (no duplicated bodies)
 
     res = {"attn": [], "ffn": []}
     emb = [model.tok_emb.weight]
     if getattr(model.cfg, "pos_encoding", "learned") == "learned":
         emb.append(model.pos_emb.weight)
     res["embed"] = gnorm(emb)
-    def nrm(t):
-        return float(t.pow(2).sum().item()) ** 0.5
     for layer in model.layers:
         if isinstance(layer, AttnBlock):
             g = layer.attn.qkv.weight.grad                     # [3*dm, dm]: Q | K | V stacked
@@ -432,6 +434,27 @@ class TrainingRun:
                    for c in self.checkpoints for v in c.state_dict.values())
 
 
+def _train_one_step(model, opt, task, kind, gen, cfg, s, total, device):
+    """One optimizer step on a fresh train batch; returns (loss, accuracy, lr, grad_norm). The single
+    source of truth for the step, shared by _run_training (record) and continue_training (append)."""
+    lr_now = _lr_at(s, total, cfg.lr, cfg.lr_schedule)
+    for g in opt.param_groups:
+        g["lr"] = lr_now
+    if kind == "lm":
+        x, y, _ = split_batch(task, cfg.batch, device, gen, "train")
+        out, loss = model(x, y)
+        acc = _token_accuracy(out.detach(), y)
+    else:
+        x, target = split_batch(task, cfg.batch, device, gen, "train")
+        out, loss = model(x, target)
+        acc = _batch_score(out.detach(), target, kind)
+    opt.zero_grad()
+    loss.backward()
+    gnorm = _grad_norm(model)
+    opt.step()
+    return float(loss.item()), acc, lr_now, gnorm
+
+
 def _run_training(cfg: RunConfig, *, stop_at: int, capture: bool, on_step=None, on_checkpoint=None):
     """The single, deterministic training loop used BOTH for the recorded run and for
     exact replay. Determinism: the model init uses the global RNG (seeded once); training
@@ -460,25 +483,11 @@ def _run_training(cfg: RunConfig, *, stop_at: int, capture: bool, on_step=None, 
         if s == stop_at:
             break
 
-        lr_now = _lr_at(s, cfg.steps, cfg.lr, cfg.lr_schedule)
-        for g in opt.param_groups:
-            g["lr"] = lr_now
-        if kind == "lm":
-            x, y, _ = split_batch(task, cfg.batch, device, batch_gen, "train")
-            out, loss = model(x, y)
-            train_acc = _token_accuracy(out.detach(), y)
-        else:
-            x, target = split_batch(task, cfg.batch, device, batch_gen, "train")
-            out, loss = model(x, target)
-            train_acc = _batch_score(out.detach(), target, kind)
-        opt.zero_grad()
-        loss.backward()
-        gnorm = _grad_norm(model)
-        opt.step()
-
+        loss_v, train_acc, lr_now, gnorm = _train_one_step(
+            model, opt, task, kind, batch_gen, cfg, s, cfg.steps, device)
         if capture:
             metrics["step"].append(s)
-            metrics["train_loss"].append(float(loss.item()))
+            metrics["train_loss"].append(loss_v)
             metrics["train_acc"].append(train_acc)
             metrics["lr"].append(lr_now)
             metrics["grad_norm"].append(gnorm)
@@ -512,23 +521,9 @@ def continue_training(run: "TrainingRun", extra_steps: int, on_step=None, on_che
                 on_checkpoint(ck, run.checkpoints)
         if s == new_total:
             break
-        lr_now = _lr_at(s, new_total, cfg.lr, cfg.lr_schedule)
-        for g in opt.param_groups:
-            g["lr"] = lr_now
-        if kind == "lm":
-            x, y, _ = split_batch(task, cfg.batch, device, gen, "train")
-            out, loss = model(x, y)
-            acc = _token_accuracy(out.detach(), y)
-        else:
-            x, target = split_batch(task, cfg.batch, device, gen, "train")
-            out, loss = model(x, target)
-            acc = _batch_score(out.detach(), target, kind)
-        opt.zero_grad()
-        loss.backward()
-        gn = _grad_norm(model)
-        opt.step()
+        loss_v, acc, lr_now, gn = _train_one_step(model, opt, task, kind, gen, cfg, s, new_total, device)
         run.metrics["step"].append(s)
-        run.metrics["train_loss"].append(float(loss.item()))
+        run.metrics["train_loss"].append(loss_v)
         run.metrics["train_acc"].append(acc)
         run.metrics["lr"].append(lr_now)
         run.metrics["grad_norm"].append(gn)
