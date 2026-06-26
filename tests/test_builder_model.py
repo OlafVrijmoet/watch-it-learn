@@ -168,9 +168,9 @@ def test_trace_interface():
     stages = m.forward_trace(x)
     assert stages[0][0] == "embed"
     assert len(stages) == 1 + len(m.cfg.layers)
-    assert len(m.attention_layers()) == 1 and len(m.dense_layers()) == 1
+    assert len(m.attention_layers()) == 1 and len(m.ffn_layers()) == 1
     assert m.attention_layers()[0].attn.last_attn is not None
-    assert m.dense_layers()[0].last_hidden is not None
+    assert m.ffn_layers()[0].last_hidden is not None
 
 
 def test_init_schemes():

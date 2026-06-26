@@ -40,6 +40,12 @@ from builder_model import (BuilderModel, BuilderConfig, AttnCfg, FFNCfg, Majorit
 # next-token (LM) tasks + the pooled-head (classification / regression) tasks
 ALL_TASKS = {**TASKS, "Majority": MajorityTask, "Density": DensityTask}
 
+# Seed offsets — each carves an independent-but-deterministic RNG stream off cfg.seed, so they never
+# collide with the model-init RNG or with each other (named so the intent + the spacing are legible).
+TRAIN_STREAM_OFFSET = 12345      # training-batch generator (continuation adds the base step on top)
+EVAL_SEED = 1                    # the fixed held-out / train eval batch
+GRAD_SCALE_SEED_BASE = 90000     # per-checkpoint batches when pinning the gradient-bar axis
+
 
 # ---------------------------------------------------------------------------
 # Checkpoint cadence
@@ -70,8 +76,8 @@ class RunConfig:
     # task
     task_name: str = "Sort"
     task_kwargs: dict = field(default_factory=dict)
-    # architecture: layer_specs are ("attn", {...}) or ("dense", {...}) -> BuilderModel
-    layer_specs: tuple = (("attn",), ("dense", (64,)))
+    # architecture: layer_specs are ("attn", {...}) or ("ffn", {...}) -> BuilderModel
+    layer_specs: tuple = (("attn",), ("ffn", (64,)))
     d_model: int = 32
     n_heads: int = 4
     dropout: float = 0.0
@@ -115,7 +121,8 @@ def task_kind(task) -> str:
 def _spec_to_layer(spec, cfg):
     """Map a layer_spec entry to a BuilderModel layer config. Entries may be:
        ("attn",) / ("attn", {causal,bias,attn_dropout,resid_dropout,wo_hidden,wo_activation})
-       ("dense", hidden) / ("dense", {hidden,activation,bias,dropout})  (hidden = int or tuple)."""
+       ("ffn", hidden) / ("ffn", {hidden,activation,bias,dropout})  (hidden = int or tuple).
+    The legacy "dense" tag is still accepted (any non-"attn" entry builds an FFN block)."""
     kind = spec[0]
     opts = spec[1] if len(spec) > 1 else None
     if kind == "attn":
@@ -325,7 +332,7 @@ def sample_train_batch(cfg: "RunConfig", task, seed: int):
 
 def exact_train_batch(cfg: "RunConfig", task, step: int):
     """Replay the deterministic training generator to return the exact (x, target) used at `step`."""
-    gen = torch.Generator().manual_seed(cfg.seed + 12345)
+    gen = torch.Generator().manual_seed(cfg.seed + TRAIN_STREAM_OFFSET)
     for _ in range(max(0, step)):
         split_batch(task, cfg.batch, "cpu", gen, "train")     # advance exactly as training did
     out = split_batch(task, cfg.batch, "cpu", gen, "train")
@@ -340,7 +347,7 @@ def gradient_scale(run, task) -> float:
         steps = sorted({steps[round(k * (len(steps) - 1) / 13)] for k in range(14)})
     vals = [1e-9]
     for i, stp in enumerate(steps):
-        g = layer_gradients(run.reconstruct(stp), [sample_train_batch(run.cfg, task, 90000 + i)])
+        g = layer_gradients(run.reconstruct(stp), [sample_train_batch(run.cfg, task, GRAD_SCALE_SEED_BASE + i)])
         vals += [g["embed"], g["head"]]
         for a in g["attn"]:
             vals += [a["q"], a["k"], a["v"], a["o"]]
@@ -438,7 +445,7 @@ def _run_training(cfg: RunConfig, *, stop_at: int, capture: bool, on_step=None, 
     model = build_model(cfg, task, device, seed=cfg.seed)
     init_state = _cpu_state(model)
     opt = make_optimizer(cfg.optimizer, model.parameters(), cfg.lr, cfg.weight_decay)
-    batch_gen = torch.Generator().manual_seed(cfg.seed + 12345)   # separate from the global RNG
+    batch_gen = torch.Generator().manual_seed(cfg.seed + TRAIN_STREAM_OFFSET)   # separate from the global RNG
 
     ckpt_steps = set(log_spaced_steps(cfg.steps, cfg.n_checkpoints)) if capture else set()
     metrics = {"step": [], "train_loss": [], "train_acc": [], "lr": [], "grad_norm": []}
@@ -495,7 +502,7 @@ def continue_training(run: "TrainingRun", extra_steps: int, on_step=None, on_che
     base = int(run.checkpoint_steps[-1])
     new_total = base + int(extra_steps)
     new_cfg = replace(cfg, steps=new_total)                     # for correct lr scheduling/capture
-    gen = torch.Generator().manual_seed(cfg.seed + 12345 + base)   # reproducible continuation stream
+    gen = torch.Generator().manual_seed(cfg.seed + TRAIN_STREAM_OFFSET + base)   # reproducible continuation stream
     want = {s for s in log_spaced_steps(new_total, cfg.n_checkpoints) if s > base} | {new_total}
     for s in range(base, new_total + 1):
         if s in want:
@@ -549,7 +556,7 @@ def _capture_checkpoint(model, task, device, step, cfg) -> Checkpoint:
 @torch.no_grad()
 def _eval_lm(model, task: Task, device, split="test", batch=512):
     """(loss, exact-match accuracy) for an LM task on the given split (default = held-out test)."""
-    x, y, seq = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
+    x, y, seq = split_batch(task, batch, device, torch.Generator().manual_seed(EVAL_SEED), split)
     model.eval()
     _, loss = model(x, y)
     out = generate(model, task, seq, device)
@@ -561,7 +568,7 @@ def _eval_lm(model, task: Task, device, split="test", batch=512):
 @torch.no_grad()
 def _eval_pooled(model, task: Task, device, split="test", batch=512):
     """(loss, score) for a pooled head on the given split: accuracy (classify) / R^2 (regression)."""
-    x, target = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
+    x, target = split_batch(task, batch, device, torch.Generator().manual_seed(EVAL_SEED), split)
     out, loss = model(x, target)
     return float(loss.item()), _batch_score(out, target, task_kind(task))
 
@@ -572,7 +579,7 @@ def per_category_eval(model, task: Task, device="cpu", batch=512, split="test"):
     given split (default = held-out). Accuracy is exact-match of the generated output (LM) or argmax ==
     label (classify); the counts double as the category distribution. Tasks without `category_of` skip this."""
     model.eval()
-    x, y, *rest = split_batch(task, batch, device, torch.Generator().manual_seed(1), split)
+    x, y, *rest = split_batch(task, batch, device, torch.Generator().manual_seed(EVAL_SEED), split)
     if task_kind(task) == "lm":
         preds = generate(model, task, rest[0], device)
         correct = (preds == rest[0][:, task.prompt_len:]).all(dim=1)
@@ -644,7 +651,7 @@ def trace_forward(model: BuilderModel, task: Task, seq) -> dict:
         "vocab_size": int(task.vocab_size),
         "stages": [{"label": lbl, "residual": resid[0].cpu().tolist()} for lbl, resid in stages],
         "attention": [],
-        "dense": [],
+        "ffn": [],
     }
 
     for i, al in enumerate(attn_layers):
@@ -658,9 +665,9 @@ def trace_forward(model: BuilderModel, task: Task, seq) -> dict:
             entry.update(q=reshape(q), k=reshape(k), v=reshape(v))
         out["attention"].append(entry)
 
-    for i, dl in enumerate(model.dense_layers()):
+    for i, dl in enumerate(model.ffn_layers()):
         hiddens = [hh[0].cpu().tolist() for hh in (getattr(dl, "last_hiddens", None) or [dl.last_hidden])]
-        out["dense"].append({"layer": i, "hidden": hiddens[-1], "hiddens": hiddens})
+        out["ffn"].append({"layer": i, "hidden": hiddens[-1], "hiddens": hiddens})
 
     head_kind = getattr(getattr(model, "cfg", None), "head", "lm")
     if head_kind == "lm":
@@ -744,7 +751,7 @@ def generate_sampled(model, task, seq, method="greedy", temperature=1.0, top_k=0
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     cfg = RunConfig(task_name="Reverse", task_kwargs={"length": 5},
-                    layer_specs=(("attn",), ("dense", (64,))),
+                    layer_specs=(("attn",), ("ffn", (64,))),
                     d_model=32, n_heads=4, steps=150, n_checkpoints=20, seed=0, device="cpu")
     run = TrainingRun.train(cfg)
     print(f"params={run.n_params}  checkpoints={len(run.checkpoints)} at {run.checkpoint_steps}")

@@ -27,6 +27,11 @@ from flow_svg import flow_svg_component, model_svg, svg_document, replay_html
 from flow_component import flow_html, component_height
 from training_utils import divisor_heads, suggest_lr_transformer
 
+# seed bases for the gradient-inspection batches (named so the independent streams are legible)
+SCRUB_BATCH_BASE = 70000     # the "scrub a batch" gradient slider
+AVG_BATCH_BASE = 80000       # the averaged-over-3-batches gradient view
+
+
 def _show(target, fig):
     """Render a matplotlib figure into `target` (st or a column) then close it. st.pyplot does NOT close
     it, so without this every scrub/toggle leaks a figure into matplotlib's global registry."""
@@ -337,7 +342,7 @@ def version_layer_specs(arch_, c):
         else:
             units = int(ss.get(f"hu{i}", b.get("hidden", ffn * dm)))
             nl = int(ss.get(f"nl{i}", b.get("n_layers", 1)))
-            specs.append(("dense", {"hidden": tuple([units] * nl),
+            specs.append(("ffn", {"hidden": tuple([units] * nl),
                                     "activation": ss.get(f"ac{i}", b.get("activation", act_def)) if ovr else act_def,
                                     "bias": ss.get(f"fb{i}", b.get("bias", bias_def)) if ovr else bias_def,
                                     "dropout": ss.get(f"fd{i}", b.get("dropout", drop)) if ovr else drop}))
@@ -497,7 +502,7 @@ with run_tab:                                                 # always-visible w
             gmodel = model
             if src == "scrub a batch":
                 bidx = st.slider("batch #", 0, 49, 0, key="gradbatch")
-                batches = [sample_train_batch(cfg, task, 70000 + bidx)]
+                batches = [sample_train_batch(cfg, task, SCRUB_BATCH_BASE + bidx)]
             elif src == "exact training batch":
                 batches = [exact_train_batch(cfg, task, step)]
                 gmodel = run.reconstruct_exact(step)
@@ -512,7 +517,7 @@ with run_tab:                                                 # always-visible w
                         po, _ = final(in_ids_now)
                     batches = [(in_ids_now, po.argmax(-1) if head_kind == "classify" else po)]
             else:
-                batches = [sample_train_batch(cfg, task, 80000 + i) for i in range(3)]
+                batches = [sample_train_batch(cfg, task, AVG_BATCH_BASE + i) for i in range(3)]
             grads = layer_gradients(gmodel, batches)
 
 in_ids = torch.tensor([chosen])

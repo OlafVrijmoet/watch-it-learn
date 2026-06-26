@@ -254,7 +254,7 @@ def model_svg(trace: dict, readout_pos=None, grads=None) -> tuple[str, int, int]
             res_row(y_out, out_vals, out_mx, "after attn")
             yb = y_out + emb_h
         else:                                                 # FFN band (one row per hidden layer)
-            hiddens = trace["dense"][idx].get("hiddens") or [trace["dense"][idx]["hidden"]]
+            hiddens = trace["ffn"][idx].get("hiddens") or [trace["ffn"][idx]["hidden"]]
             L = len(hiddens)
             hmx = max((amx(h) for h in hiddens), default=1.0)
             units = len(hiddens[0][0]) if hiddens and hiddens[0] else 0

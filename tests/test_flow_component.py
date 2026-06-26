@@ -39,7 +39,7 @@ def _embedded_json(html):
 
 def _lm_cfg(**kw):
     base = dict(task_name="Reverse", task_kwargs={"length": 4},
-                layer_specs=(("attn",), ("dense", (48,))), d_model=32, n_heads=4,
+                layer_specs=(("attn",), ("ffn", (48,))), d_model=32, n_heads=4,
                 steps=40, n_checkpoints=8, seed=0, device="cpu")
     base.update(kw)
     return RunConfig(**base)

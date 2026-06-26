@@ -28,7 +28,7 @@ from replay_engine import (
 def test_per_category_eval_lm():
     """per_category_eval returns one entry per Arithmetic operation, with valid accuracy + counts."""
     cfg = RunConfig(task_name="Arithmetic", task_kwargs={"n_digits": 1, "ops": ["add", "subtract"]},
-                    layer_specs=(("attn",), ("dense", (64,))), d_model=32, n_heads=4,
+                    layer_specs=(("attn",), ("ffn", (64,))), d_model=32, n_heads=4,
                     steps=60, n_checkpoints=6, seed=0)
     run = TrainingRun.train(cfg)
     cats = per_category_eval(run.reconstruct(run.cfg.steps), run.task, batch=256)
@@ -38,7 +38,7 @@ def test_per_category_eval_lm():
 
 def test_per_category_eval_classify():
     """per_category_eval splits a classification task (Majority) by its true class."""
-    cfg = RunConfig(task_name="Majority", task_kwargs={}, layer_specs=(("attn",), ("dense", (64,))),
+    cfg = RunConfig(task_name="Majority", task_kwargs={}, layer_specs=(("attn",), ("ffn", (64,))),
                     d_model=32, n_heads=4, head="classify", pooling="mean", steps=60, n_checkpoints=6, seed=0)
     run = TrainingRun.train(cfg)
     cats = per_category_eval(run.reconstruct(run.cfg.steps), run.task, batch=256)
@@ -49,7 +49,7 @@ def test_per_category_eval_classify():
 # small configs to keep tests fast
 def _struct_cfg(**kw):
     base = dict(task_name="Reverse", task_kwargs={"length": 4},
-                layer_specs=(("attn",), ("dense", (48,))),
+                layer_specs=(("attn",), ("ffn", (48,))),
                 d_model=32, n_heads=4, steps=60, batch=64, lr=3e-3,
                 n_checkpoints=12, seed=0, device="cpu")
     base.update(kw)
@@ -183,7 +183,7 @@ def test_trace_shapes_and_causal_mask():
     assert q.shape == (run.cfg.n_heads, T, run.cfg.d_model // run.cfg.n_heads)
 
     # dense hidden + logits/probs present and finite; probs are distributions
-    assert len(tr["dense"]) == 1
+    assert len(tr["ffn"]) == 1
     probs = torch.tensor(tr["probs"])
     assert probs.shape == (T, tr["vocab_size"])
     assert torch.isfinite(probs).all()
@@ -204,15 +204,15 @@ def test_trace_json_serializable():
     assert set(fr) >= {"requested_step", "snapped_step", "metrics", "checkpoint_steps", "trace"}
 
 
-def test_dense_only_stack_traces():
+def test_ffn_only_stack_traces():
     """A stack with no attention still trains and traces (empty attention list)."""
-    cfg = _struct_cfg(layer_specs=(("dense", (32,)),), steps=30, n_checkpoints=6)
+    cfg = _struct_cfg(layer_specs=(("ffn", (32,)),), steps=30, n_checkpoints=6)
     run = TrainingRun.train(cfg)
     task = run.task
     _, _, probe = task.make_batch(1, generator=torch.Generator().manual_seed(0))
     tr = trace_forward(run.reconstruct(cfg.steps), task, probe[0])
     assert tr["attention"] == []
-    assert len(tr["dense"]) == 1
+    assert len(tr["ffn"]) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +281,7 @@ def _cpu(model):
 # ---------------------------------------------------------------------------
 def test_classify_run_learns_and_reconstructs_exactly():
     cfg = RunConfig(task_name="Majority", task_kwargs={"length": 13}, head="classify", pooling="mean",
-                    layer_specs=(("attn",), ("dense", (48,))), d_model=32, n_heads=4,
+                    layer_specs=(("attn",), ("ffn", (48,))), d_model=32, n_heads=4,
                     steps=150, batch=64, lr=3e-3, n_checkpoints=12, seed=0, device="cpu")
     run = TrainingRun.train(cfg)
     assert run.checkpoints[-1].acc > run.checkpoints[0].acc          # learned
@@ -295,12 +295,12 @@ def test_classify_run_learns_and_reconstructs_exactly():
     tr = trace_forward(run.reconstruct(cfg.steps), task, x[0])
     assert tr["head"] == "classify"
     assert "output" in tr and len(tr["probs"]) == task.n_classes
-    assert len(tr["attention"]) == 1 and len(tr["dense"]) == 1       # introspection still works
+    assert len(tr["attention"]) == 1 and len(tr["ffn"]) == 1       # introspection still works
 
 
 def test_regression_run_with_attention_pooling():
     cfg = RunConfig(task_name="Density", task_kwargs={"length": 12}, head="regression", pooling="attn",
-                    layer_specs=(("attn",), ("dense", (48,))), d_model=32, n_heads=4,
+                    layer_specs=(("attn",), ("ffn", (48,))), d_model=32, n_heads=4,
                     steps=150, batch=64, lr=3e-3, n_checkpoints=12, seed=0, device="cpu")
     run = TrainingRun.train(cfg)
     assert run.checkpoints[-1].acc > run.checkpoints[0].acc          # R^2 improved

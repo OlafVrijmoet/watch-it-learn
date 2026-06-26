@@ -13,7 +13,7 @@ This realizes the "Layer settings reference" spec: every block type and its knob
 
 It is a SUPERSET of the LM stack used elsewhere: with the default config it is an
 ordinary pre-LN decoder, exposing the same `forward(idx, targets)`, `forward_trace`,
-`attention_layers`, `dense_layers` interface (so the replay engine / figures work).
+`attention_layers`, `ffn_layers` interface (so the replay engine / figures work).
 Classification & regression add a pooled head and their own tiny tasks.
 """
 from __future__ import annotations
@@ -280,7 +280,7 @@ class BuilderModel(nn.Module):
     def attention_layers(self):
         return [l for l in self.layers if isinstance(l, AttnBlock)]
 
-    def dense_layers(self):
+    def ffn_layers(self):
         return [l for l in self.layers if isinstance(l, FFNBlock)]
 
     @torch.no_grad()

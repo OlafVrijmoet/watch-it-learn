@@ -131,17 +131,17 @@ D.attention.forEach(a => {
 });
 
 // ---- feed-forward hidden activations (the FFN's internal "capacity" layer) ----
-let denseW = 0;
-if(D.dense && D.dense.length){
-  let maxH = 1; D.dense.forEach(d=>{ if(d.hidden[0]) maxH = Math.max(maxH, d.hidden[0].length); });
+let ffnW = 0;
+if(D.ffn && D.ffn.length){
+  let maxH = 1; D.ffn.forEach(d=>{ if(d.hidden[0]) maxH = Math.max(maxH, d.hidden[0].length); });
   const FW = Math.max(3, Math.min(7, Math.floor(380/maxH))), FH = 10;
-  D.dense.forEach(d => {
+  D.ffn.forEach(d => {
     const H = d.hidden; const hid = H[0] ? H[0].length : 0;
     let mx = 1e-9; H.forEach(r=>r.forEach(v=>{ if(Math.abs(v)>mx) mx = Math.abs(v); }));
     rowLabel(`ffn ${d.layer+1} hidden`);
     svg.append("text").attr("x",ML).attr("y",y-2).attr("class","sub").text(`${hid} units`);
     const g = svg.append("g").attr("transform",`translate(${ML},${y+4})`);
-    denseW = Math.max(denseW, hid*FW);
+    ffnW = Math.max(ffnW, hid*FW);
     for(let r=0;r<T;r++) for(let c=0;c<hid;c++){
       g.append("rect").attr("x",c*FW).attr("y",r*FH).attr("width",FW-0.4).attr("height",FH-0.4)
        .attr("fill",diverge(H[r][c],mx))
@@ -180,7 +180,7 @@ if(D.head === "regression"){
 }
 
 // size the svg to fit
-const wide = ML + Math.max(dm*CW, attnW, denseW, 460) + MR;
+const wide = ML + Math.max(dm*CW, attnW, ffnW, 460) + MR;
 svg.attr("width", wide).attr("height", y + 10);
 </script></body></html>"""
 
@@ -196,6 +196,6 @@ def component_height(trace: dict) -> int:
     T = trace.get("T", 8)
     stages = len(trace.get("stages", []))
     attn = len(trace.get("attention", []))
-    dense = len(trace.get("dense", []))
+    dense = len(trace.get("ffn", []))
     return int(60 + stages * (T * 10 + 14) + attn * (T * 16 + 24 + T * 6 + 30)
                + dense * (T * 10 + 22) + 150)

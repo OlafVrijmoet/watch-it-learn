@@ -318,7 +318,7 @@ def test_compare_page_renders():
     assert not at.exception, at.exception                      # empty experiment -> info, no crash
 
     cfg = RunConfig(task_name="Reverse", task_kwargs={"length": 3},
-                    layer_specs=(("attn",), ("dense", (48,))), d_model=24, n_heads=3,
+                    layer_specs=(("attn",), ("ffn", (48,))), d_model=24, n_heads=3,
                     steps=40, n_checkpoints=6, seed=0)
     run = TrainingRun.train(cfg)
     at2 = AppTest.from_file("compare_page.py", default_timeout=300)

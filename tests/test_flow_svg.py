@@ -20,7 +20,7 @@ from flow_svg import model_svg, flow_svg_component, svg_document, render_png
 
 def _run(d_model=24, n_heads=3, length=3):
     cfg = RunConfig(task_name="Reverse", task_kwargs={"length": length},
-                    layer_specs=(("attn",), ("dense", (48,))), d_model=d_model, n_heads=n_heads,
+                    layer_specs=(("attn",), ("ffn", (48,))), d_model=d_model, n_heads=n_heads,
                     steps=40, n_checkpoints=8, seed=0)
     return TrainingRun.train(cfg)
 
