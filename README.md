@@ -62,7 +62,7 @@ Then: **Build** a model (or keep the default) → **Train** → open the **Run**
 Run the tests (from the repo root):
 
 ```bash
-for t in test_replay_engine test_builder_model test_flow_svg test_flow_component test_builder_app; do
+for t in test_replay_engine test_builder_model test_flow_svg test_flow_component test_app_charts test_builder_app; do
   PYTHONPATH=. python tests/$t.py
 done
 ```

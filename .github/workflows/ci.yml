@@ -29,7 +29,7 @@ jobs:
         run: |
           set -e
           # The fast suites — quick, reliable signal for the badge.
-          for t in test_replay_engine test_builder_model test_flow_svg test_flow_component; do
+          for t in test_replay_engine test_builder_model test_flow_svg test_flow_component test_app_charts; do
             python tests/$t.py
           done
 

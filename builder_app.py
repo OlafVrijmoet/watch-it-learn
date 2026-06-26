@@ -15,7 +15,6 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pandas as pd
-import matplotlib.pyplot as plt
 import streamlit as st
 import torch
 
@@ -26,81 +25,12 @@ from replay_engine import (RunConfig, TrainingRun, build_model, build_task, trac
 from flow_svg import flow_svg_component, model_svg, svg_document, replay_html
 from flow_component import flow_html, component_height
 from training_utils import divisor_heads, suggest_lr_transformer
+from app_charts import _show, _metric_chart, _grad_bars
+from app_state import version_layer_specs, _build_cfg
 
 # seed bases for the gradient-inspection batches (named so the independent streams are legible)
 SCRUB_BATCH_BASE = 70000     # the "scrub a batch" gradient slider
 AVG_BATCH_BASE = 80000       # the averaged-over-3-batches gradient view
-
-
-def _show(target, fig):
-    """Render a matplotlib figure into `target` (st or a column) then close it. st.pyplot does NOT close
-    it, so without this every scrub/toggle leaks a figure into matplotlib's global registry."""
-    target.pyplot(fig)
-    plt.close(fig)
-
-
-def _metric_chart(xs, ys, cur, color, title, ys2=None, color2="#9ca3af"):
-    """A small held-out metric curve with a dashed marker at the current training step. If `ys2`
-    (the train-set series) is given, it's overlaid (dashed) with a legend so you see the gap."""
-    fig, ax = plt.subplots(figsize=(3.4, 1.5))
-    ax.plot(xs, ys, color=color, lw=1.6, label="held-out")
-    if ys2 is not None:
-        ax.plot(xs, ys2, color=color2, lw=1.4, ls="--", label="train")
-        ax.legend(fontsize=6, loc="best", frameon=False)
-    ax.axvline(cur, color="#374151", lw=1, ls="--")
-    yc = ys[min(range(len(xs)), key=lambda i: abs(xs[i] - cur))]
-    ax.scatter([cur], [yc], color=color, s=20, zorder=5)
-    ax.set_title(title, fontsize=9)
-    ax.tick_params(labelsize=7)
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
-    fig.tight_layout(pad=0.4)
-    return fig
-
-
-def _grad_bars(grads, arch, log=False, per_head=False, xmax=None):
-    """Horizontal bars of gradient magnitude per block, in flow order (embed → blocks → head).
-    `per_head` expands each attention's Q/K/V/O into one group per head; `log` uses a log x-axis;
-    `xmax` pins the axis to a fixed value (run-wide max) so steps are comparable."""
-    labels, vals, colors = ["embed"], [grads["embed"]], ["#64748b"]
-    ai = fi = 0
-    for b in arch:
-        if b["type"] == "attn" and ai < len(grads["attn"]):
-            g = grads["attn"][ai]; ai += 1
-            if per_head and g.get("heads"):
-                for h, hg in enumerate(g["heads"]):
-                    for part in ("q", "k", "v", "o"):
-                        labels.append(f"A{ai}H{h}·{part.upper()}"); vals.append(hg[part]); colors.append("#2563eb")
-            else:
-                for part in ("q", "k", "v", "o"):
-                    labels.append(f"A{ai}·{part.upper()}"); vals.append(g[part]); colors.append("#2563eb")
-        elif b["type"] == "ffn" and fi < len(grads["ffn"]):
-            f = grads["ffn"][fi]; fi += 1
-            if per_head:                                      # break FFN into hidden layers + down-proj
-                for l, ln in enumerate(f["layers"]):
-                    labels.append(f"F{fi}·h{l}"); vals.append(ln); colors.append("#16a34a")
-                labels.append(f"F{fi}·out"); vals.append(f["out"]); colors.append("#0d9488")
-            else:
-                labels.append(f"FFN{fi}"); vals.append(f["all"]); colors.append("#16a34a")
-    labels.append("head"); vals.append(grads["head"]); colors.append("#64748b")
-    fig, ax = plt.subplots(figsize=(3.6, max(1.8, 0.22 * len(labels))))
-    top = xmax if xmax else max(vals + [1e-12])               # fixed (run-wide) or per-step max
-    if log:
-        floor = top / 1e4                                      # show ~0 bars as a tiny stub
-        ax.barh(range(len(labels)), [max(v, floor) for v in vals], color=colors)
-        ax.set_xscale("log"); ax.set_xlim(floor, top)
-    else:
-        ax.barh(range(len(labels)), vals, color=colors)
-        ax.set_xlim(0, top)
-    ax.set_yticks(range(len(labels)))
-    ax.set_yticklabels(labels, fontsize=6.5)
-    ax.invert_yaxis()
-    ax.tick_params(labelsize=7)
-    ax.set_title("‖gradient‖ per block" + (" (log)" if log else ""), fontsize=9)
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
-    fig.tight_layout(pad=0.4)
-    return fig
 
 
 st.title("◆ Tiny Model Builder")
@@ -323,52 +253,6 @@ def _shared_config():
     return dict(task_name=task_name, task_kwargs=task_kwargs, head=head_kind, steps=steps, batch=batch,
                 lr=lr, optimizer=optimizer, lr_schedule=lr_schedule, n_checkpoints=n_checkpoints, dev=dev)
 
-
-def version_layer_specs(arch_, c):
-    """layer_specs for ANY version (the single source of truth): per-section settings persist by their
-    unique _id; defaults come from `c`. Reads live widget values, so a setting change shows immediately
-    (regardless of widget vs render order)."""
-    ss = st.session_state
-    dm, nh_def, ffn = c["d_model"], c["n_heads"], c["ffn_mult"]
-    act_def, bias_def, drop = c["def_act"], c["def_bias"], c["def_dropout"]
-    specs = []
-    for b in arch_:
-        i = b["_id"]
-        ovr = ss.get(f"ov{i}", b.get("override", False))     # does this section override the defaults?
-        if b["type"] == "attn":
-            nh = ss.get(f"nh{i}", b.get("n_heads", nh_def))
-            if dm % nh != 0:
-                nh = nh_def
-            wo_on = ss.get(f"wo{i}", bool(b.get("wo_hidden")))
-            wo_hidden = (int(ss.get(f"wou{i}", b.get("wo_units", dm))),) if wo_on else ()
-            specs.append(("attn", {"n_heads": nh, "causal": ss.get(f"ca{i}", b.get("causal", True)),
-                                   "bias": ss.get(f"ba{i}", b.get("bias", bias_def)) if ovr else bias_def,
-                                   "attn_dropout": ss.get(f"ad{i}", b.get("attn_dropout", drop)) if ovr else drop,
-                                   "wo_hidden": wo_hidden,
-                                   "wo_activation": ss.get(f"woa{i}", b.get("wo_act", "gelu"))}))
-        else:
-            units = int(ss.get(f"hu{i}", b.get("hidden", ffn * dm)))
-            nl = int(ss.get(f"nl{i}", b.get("n_layers", 1)))
-            specs.append(("ffn", {"hidden": tuple([units] * nl),
-                                    "activation": ss.get(f"ac{i}", b.get("activation", act_def)) if ovr else act_def,
-                                    "bias": ss.get(f"fb{i}", b.get("bias", bias_def)) if ovr else bias_def,
-                                    "dropout": ss.get(f"fd{i}", b.get("dropout", drop)) if ovr else drop}))
-    return tuple(specs)
-
-
-def _build_cfg(c, arch_, shared):
-    """A RunConfig from a per-version config dict `c` (architecture / init / output) + its arch + the SHARED
-    task/training-protocol dict (steps/batch/lr/optimizer/schedule/checkpoints/device + task/head). Reads only
-    its arguments (plus live st.session_state for per-section overrides) — no builder_app module globals —
-    so it's testable and could move out of the app module."""
-    pool = c["pool_sel"] if shared["head"] in ("classify", "regression") else "last"
-    return RunConfig(task_name=shared["task_name"], task_kwargs=shared["task_kwargs"],
-                     layer_specs=version_layer_specs(arch_, c),
-                     d_model=c["d_model"], n_heads=c["n_heads"], dropout=c["def_dropout"],
-                     steps=shared["steps"], batch=shared["batch"], lr=shared["lr"], optimizer=shared["optimizer"],
-                     lr_schedule=shared["lr_schedule"], head=shared["head"], pooling=pool,
-                     pos_encoding=c["pos_encoding"], init=c["init_scheme"], init_scale=c["init_scale"],
-                     seed=c["seed"], n_checkpoints=shared["n_checkpoints"], device=shared["dev"])
 
 
 def make_cfg():                                              # the active version's RunConfig (live widgets)
