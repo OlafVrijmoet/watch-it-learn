@@ -48,7 +48,7 @@ Procedurally generated (so accuracy reflects generalization, not memorization), 
 - **Deterministic training replay.** Training records dense per-step metrics plus **log-spaced weight checkpoints** (dense early, sparse late). Any step is reconstructed bit-for-bit (snap-to-nearest checkpoint, or a full deterministic re-run), and activations are **recomputed on demand**, never stored. Storage is `checkpoints × params`; per-frame compute is O(1).
 - **On-the-fly gradient introspection.** Gradients are never stored (that would be model-size × steps). Instead they're computed live: reconstruct the weights at a step, run a single backward pass, aggregate per block / per head / per neuron.
 - **Held-out evaluation.** Train/test are split by a deterministic hash of the input, so every reported accuracy is on inputs the model never saw.
-- **A hand-built SVG renderer.** The model view is hand-built SVG matching a locked Figma design (no charting framework), which means it also rasterizes to PNG (via cairosvg) for browser-free render tests.
+- **A hand-built SVG renderer.** The model view is SVG matching a locked Figma design (no charting framework), which means it also rasterizes to PNG (via cairosvg) for browser-free render tests.
 - **Comparative experiments.** Each version is just an independent `RunConfig` + `TrainingRun`, so holding several and comparing their curves and gradients reuses the same engine, with no extra machinery.
 - **Tested.** 67 tests cover the engine (reconstruction is bit-exact), the model, the renderer, the app, and the experiments / compare flow.
 
